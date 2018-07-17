@@ -67,6 +67,7 @@ def to_tensor(x, dtype="float"):
 
 def soft_update(target, source, tau):
     """
+    Performs a soft target update
     """
     for target_param, param in zip(target.parameters(), source.parameters()):
         target_param.data.copy_(
@@ -76,6 +77,7 @@ def soft_update(target, source, tau):
 
 def hard_update(target, source):
     """
+    Performs a hard target update
     """
     for target_param, param in zip(target.parameters(), source.parameters()):
         target_param.data.copy_(param.data)

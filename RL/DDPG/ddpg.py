@@ -9,7 +9,7 @@ from RL.DDPG.model import Actor, Critic
 from RL.DDPG.random_process import OrnsteinUhlenbeckProcess
 from RL.DDPG.util import *
 
-criterion = nn.SmoothL1Loss()
+criterion = nn.MSELoss()
 
 
 class DDPG(object):
@@ -29,6 +29,9 @@ class DDPG(object):
         self.critic = Critic(self.nb_states, self.nb_actions)
         self.critic_target = Critic(self.nb_states, self.nb_actions)
         self.critic_optim = Adam(self.critic.parameters(), lr=args.critic_lr)
+
+        # scale the actor parameters
+        self.actor.scale_params(0.1)
 
         # Make sure target is with the same weight
         hard_update(self.actor_target, self.actor)
@@ -60,12 +63,11 @@ class DDPG(object):
         done_batch = to_tensor(batch.dones).view(-1, 1)
 
         # Prepare for the target q batch
-        with torch.no_grad():
-            next_q_values = self.critic_target(
-                [next_state_batch, self.actor_target(next_state_batch)])
+        next_q_values = self.critic_target(
+            [next_state_batch, self.actor_target(next_state_batch)]).detach()
 
-            target_q_batch = self.reward_scale * reward_batch + \
-                self.discount * (1. - done_batch) * next_q_values
+        target_q_batch = self.reward_scale * reward_batch + \
+            self.discount * (1. - done_batch) * next_q_values
 
         # Critic update
         self.critic_optim.zero_grad()

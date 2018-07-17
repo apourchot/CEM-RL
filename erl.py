@@ -180,13 +180,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--mode', default='train', type=str,)
-    parser.add_argument('--env', default='Pendulum-v0', type=str)
+    parser.add_argument('--env', default='HalfCheetah-v2', type=str)
 
     # DDPG parameters
     parser.add_argument('--hidden1', default=400, type=int)
     parser.add_argument('--hidden2', default=300, type=int)
-    parser.add_argument('--actor_lr', default=0.001, type=float)
-    parser.add_argument('--critic_lr', default=0.0001, type=float)
+    parser.add_argument('--actor_lr', default=0.00005, type=float)
+    parser.add_argument('--critic_lr', default=0.0005, type=float)
     parser.add_argument('--batch_size', default=128, type=int)
     parser.add_argument('--discount', default=0.99, type=float)
 

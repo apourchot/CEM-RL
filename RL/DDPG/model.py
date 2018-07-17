@@ -1,11 +1,16 @@
-import numpy as np
+from copy import deepcopy
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import numpy as np
 
-from copy import deepcopy
-from ipdb import set_trace as debug
+from RL.DDPG.util import hard_update
+
+
+def fanin_init(size, fanin=None):
+    fanin = fanin or size[0]
+    v = 1. / np.sqrt(fanin)
+    return torch.Tensor(size).uniform_(-v, v)
 
 
 class Actor(nn.Module):
@@ -23,9 +28,20 @@ class Actor(nn.Module):
         self.relu = nn.ReLU()
         self.tanh = nn.Tanh()
 
+        # self.init_weights()
+
+    def init_weights(self):
+        """
+        Weights init
+        """
+        self.fc1.weight.data = fanin_init(self.fc1.weight.data.size())
+        self.fc2.weight.data = fanin_init(self.fc2.weight.data.size())
+        self.fc3.weight.data = fanin_init(self.fc3.weight.data.size())
+
     def forward(self, x):
-        out = self.ln1(x)
-        out = self.fc1(out)
+
+        # out = self.ln1(x)
+        out = self.fc1(x)
         out = self.relu(out)
 
         out = self.ln2(out)
@@ -43,6 +59,13 @@ class Actor(nn.Module):
         """
         return deepcopy(np.hstack([v.numpy().flatten() for v in
                                    self.state_dict().values()]))
+
+    def scale_params(self, scale):
+        """
+        Multiply all parameters by the scale
+        """
+        for param in self.parameters():
+            param.data.copy_(scale * param.data)
 
     def set_params(self, params):
         """
@@ -98,15 +121,17 @@ class Critic(nn.Module):
         self.fc4 = nn.Linear(300, 1)
         self.relu = nn.ReLU()
 
+        # self.init_weights()
+
     def forward(self, xs):
         x, a = xs
 
-        out_x = self.ln1(x)
-        out_x = self.fc1(out_x)
+        # out_x = self.ln1(x)
+        out_x = self.fc1(x)
         out_x = self.relu(out_x)
 
-        out_a = self.ln2(a)
-        out_a = self.fc2(out_a)
+        # out_a = self.ln2(a)
+        out_a = self.fc2(a)
         out_a = self.relu(out_a)
 
         out = self.ln3(torch.cat([out_x, out_a], 1))
@@ -116,6 +141,15 @@ class Critic(nn.Module):
         out = self.ln4(out)
         out = self.fc4(out)
         return out
+
+    def init_weights(self):
+        """
+        Weights init
+        """
+        self.fc1.weight.data = fanin_init(self.fc1.weight.data.size())
+        self.fc2.weight.data = fanin_init(self.fc2.weight.data.size())
+        self.fc3.weight.data = fanin_init(self.fc3.weight.data.size())
+        self.fc4.weight.data = fanin_init(self.fc4.weight.data.size())
 
     def load_model(self, filename):
         """
