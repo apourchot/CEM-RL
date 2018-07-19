@@ -24,6 +24,9 @@ class Actor(nn.Module):
         self.relu = nn.ReLU()
         self.tanh = nn.Tanh()
 
+        if USE_CUDA:
+            self.cuda()
+
     def forward(self, x):
 
         out = self.ln1(x)
@@ -126,7 +129,8 @@ class Critic(nn.Module):
         self.fc4 = nn.Linear(300, 1)
         self.relu = nn.ReLU()
 
-        # self.init_weights()
+        if USE_CUDA:
+            self.cuda()
 
     def forward(self, xs):
         x, a = xs
