@@ -12,7 +12,8 @@ USE_CUDA = torch.cuda.is_available()
 class Actor(nn.Module):
     def __init__(self, states_dim, actions_dim):
         super(Actor, self).__init__()
-        self.ln1 = nn.LayerNorm(states_dim)
+
+        # self.ln1 = nn.LayerNorm(states_dim)
         self.fc1 = nn.Linear(states_dim, 128)
 
         self.ln2 = nn.LayerNorm(128)
@@ -25,12 +26,12 @@ class Actor(nn.Module):
         self.tanh = nn.Tanh()
 
         if USE_CUDA:
-            self.cuda()
+            self.cuda
 
     def forward(self, x):
 
-        out = self.ln1(x)
-        out = self.fc1(out)
+        # out = self.ln1(x)
+        out = self.fc1(x)
         out = self.relu(out)
 
         out = self.ln2(out)
@@ -116,10 +117,11 @@ class Actor(nn.Module):
 class Critic(nn.Module):
     def __init__(self, states_dim, actions_dim):
         super(Critic, self).__init__()
-        self.ln1 = nn.LayerNorm(states_dim)
+
+        # self.ln1 = nn.LayerNorm(states_dim)
         self.fc1 = nn.Linear(states_dim, 200)
 
-        self.ln2 = nn.LayerNorm(actions_dim)
+        # self.ln2 = nn.LayerNorm(actions_dim)
         self.fc2 = nn.Linear(actions_dim, 200)
 
         self.ln3 = nn.LayerNorm(400)
@@ -129,18 +131,17 @@ class Critic(nn.Module):
         self.fc4 = nn.Linear(300, 1)
         self.relu = nn.ReLU()
 
-        if USE_CUDA:
-            self.cuda()
+        # self.init_weights()
 
     def forward(self, xs):
         x, a = xs
 
-        out_x = self.ln1(x)
-        out_x = self.fc1(out_x)
+        # out_x = self.ln1(x)
+        out_x = self.fc1(x)
         out_x = self.relu(out_x)
 
-        out_a = self.ln2(a)
-        out_a = self.fc2(out_a)
+        # out_a = self.ln2(a)
+        out_a = self.fc2(a)
         out_a = self.relu(out_a)
 
         out = self.ln3(torch.cat([out_x, out_a], 1))
