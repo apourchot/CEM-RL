@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 
 from EA.GA import GA
-from EA.ES import OpenES, SNES
 from RL.DDPG.model import Actor, Critic
 from RL.DDPG.ddpg import DDPG, GESDDPG
 from RL.DDPG.util import *
