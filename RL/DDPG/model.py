@@ -6,6 +6,8 @@ import numpy as np
 
 from RL.DDPG.util import hard_update
 
+USE_CUDA = torch.cuda.is_available()
+
 
 def fanin_init(size, fanin=None):
     fanin = fanin or size[0]
@@ -55,12 +57,19 @@ class Actor(nn.Module):
         """
         Returns parameters of the actor
         """
-        return deepcopy(np.hstack([v.data.numpy().flatten() for v in
-                                   self.parameters()]))
+        if USE_CUDA:
+            return deepcopy(np.hstack([v.data.cpu().numpy().flatten() for v in
+                                       self.parameters()]))
+        else:
+            return deepcopy(np.hstack([v.data.numpy().flatten() for v in
+                                       self.parameters()]))
 
     def get_params_grad(self):
-        return deepcopy(np.hstack([v.grad.data.numpy().flatten() for v in
-                                   self.parameters()]))
+        if USE_CUDA:
+            return deepcopy(np.hstack([v.grad.data.cpu().numpy().flatten() for v in self.parameters()]))
+        else:
+            return deepcopy(np.hstack([v.grad.data.numpy().flatten() for v in
+                                       self.parameters()]))
 
     def set_params(self, params):
         """
@@ -69,8 +78,13 @@ class Actor(nn.Module):
         cpt = 0
         for param in self.parameters():
             tmp = np.product(param.size())
-            param.data.copy_(torch.from_numpy(
-                params[cpt:cpt + tmp]).view(param.size()))
+
+            if USE_CUDA:
+                param.data.copy_(torch.from_numpy(
+                    params[cpt:cpt + tmp]).view(param.size()).cuda())
+            else:
+                param.data.copy_(torch.from_numpy(
+                    params[cpt:cpt + tmp]).view(param.size()))
             cpt += tmp
 
     def set_params_grad(self, params):
@@ -80,8 +94,13 @@ class Actor(nn.Module):
         cpt = 0
         for param in self.parameters():
             tmp = np.product(param.size())
-            param.grad.data.copy_(torch.from_numpy(
-                params[cpt:cpt + tmp]).view(param.size()))
+
+            if USE_CUDA:
+                param.grad.data.copy_(torch.from_numpy(
+                    params[cpt:cpt + tmp]).view(param.size()).cuda())
+            else:
+                param.grad.data.copy_(torch.from_numpy(
+                    params[cpt:cpt + tmp]).view(param.size()))
             cpt += tmp
 
     def scale_params(self, scale):
@@ -90,23 +109,6 @@ class Actor(nn.Module):
         """
         for param in self.parameters():
             param.data.copy_(scale * param.data)
-
-    # def set_params(self, params):
-    #     """
-    #     Set the params of the network to the given parameters
-    #     """
-    #     state_dict = self.state_dict()
-    #     cpt = 0
-    # 
-    #     # putting parameters in the right shape
-    #     for k, v in zip(state_dict.keys(), state_dict.values()):
-    #         tmp = np.product(v.size())
-    #         state_dict[k] = torch.from_numpy(
-    #             params[cpt:cpt + tmp]).view(v.size())
-    #         cpt += tmp
-    # 
-    #     # setting parameters of the network
-    #     self.load_state_dict(state_dict)
 
     def load_model(self, filename):
         """
@@ -179,12 +181,19 @@ class Critic(nn.Module):
         """
         Returns parameters of the actor
         """
-        return deepcopy(np.hstack([v.data.numpy().flatten() for v in
-                                   self.parameters()]))
+        if USE_CUDA:
+            return deepcopy(np.hstack([v.data.cpu().numpy().flatten() for v in
+                                       self.parameters()]))
+        else:
+            return deepcopy(np.hstack([v.data.numpy().flatten() for v in
+                                       self.parameters()]))
 
     def get_params_grad(self):
-        return deepcopy(np.hstack([v.grad.data.numpy().flatten() for v in
-                                   self.parameters()]))
+        if USE_CUDA:
+            return deepcopy(np.hstack([v.grad.data.cpu().numpy().flatten() for v in self.parameters()]))
+        else:
+            return deepcopy(np.hstack([v.grad.data.numpy().flatten() for v in
+                                       self.parameters()]))
 
     def set_params(self, params):
         """
@@ -193,8 +202,13 @@ class Critic(nn.Module):
         cpt = 0
         for param in self.parameters():
             tmp = np.product(param.size())
-            param.data.copy_(torch.from_numpy(
-                params[cpt:cpt + tmp]).view(param.size()))
+
+            if USE_CUDA:
+                param.data.copy_(torch.from_numpy(
+                    params[cpt:cpt + tmp]).view(param.size()).cuda())
+            else:
+                param.data.copy_(torch.from_numpy(
+                    params[cpt:cpt + tmp]).view(param.size()))
             cpt += tmp
 
     def set_params_grad(self, params):
@@ -204,8 +218,13 @@ class Critic(nn.Module):
         cpt = 0
         for param in self.parameters():
             tmp = np.product(param.size())
-            param.grad.data.copy_(torch.from_numpy(
-                params[cpt:cpt + tmp]).view(param.size()))
+
+            if USE_CUDA:
+                param.grad.data.copy_(torch.from_numpy(
+                    params[cpt:cpt + tmp]).view(param.size()).cuda())
+            else:
+                param.grad.data.copy_(torch.from_numpy(
+                    params[cpt:cpt + tmp]).view(param.size()))
             cpt += tmp
 
     def scale_params(self, scale):
