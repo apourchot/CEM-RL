@@ -4,21 +4,15 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from RL.DDPG.util import hard_update
+from RL.DDPG.util import hard_update, to_numpy
 
 USE_CUDA = torch.cuda.is_available()
-
-
-def fanin_init(size, fanin=None):
-    fanin = fanin or size[0]
-    v = 1. / np.sqrt(fanin)
-    return torch.Tensor(size).uniform_(-v, v)
 
 
 class Actor(nn.Module):
     def __init__(self, states_dim, actions_dim):
         super(Actor, self).__init__()
-        # self.ln1 = nn.LayerNorm(states_dim)
+        self.ln1 = nn.LayerNorm(states_dim)
         self.fc1 = nn.Linear(states_dim, 128)
 
         self.ln2 = nn.LayerNorm(128)
@@ -30,18 +24,10 @@ class Actor(nn.Module):
         self.relu = nn.ReLU()
         self.tanh = nn.Tanh()
 
-    def init_weights(self):
-        """
-        Weights init
-        """
-        self.fc1.weight.data = fanin_init(self.fc1.weight.data.size())
-        self.fc2.weight.data = fanin_init(self.fc2.weight.data.size())
-        self.fc3.weight.data = fanin_init(self.fc3.weight.data.size())
-
     def forward(self, x):
 
-        # out = self.ln1(x)
-        out = self.fc1(x)
+        out = self.ln1(x)
+        out = self.fc1(out)
         out = self.relu(out)
 
         out = self.ln2(out)
@@ -57,19 +43,12 @@ class Actor(nn.Module):
         """
         Returns parameters of the actor
         """
-        if USE_CUDA:
-            return deepcopy(np.hstack([v.data.cpu().numpy().flatten() for v in
-                                       self.parameters()]))
-        else:
-            return deepcopy(np.hstack([v.data.numpy().flatten() for v in
-                                       self.parameters()]))
+        return deepcopy(np.hstack([to_numpy(v).flatten() for v in
+                                   self.parameters()]))
 
     def get_params_grad(self):
-        if USE_CUDA:
-            return deepcopy(np.hstack([v.grad.data.cpu().numpy().flatten() for v in self.parameters()]))
-        else:
-            return deepcopy(np.hstack([v.grad.data.numpy().flatten() for v in
-                                       self.parameters()]))
+        return deepcopy(np.hstack([to_numpy(v.grad).flatten() for v in
+                                   self.parameters()]))
 
     def set_params(self, params):
         """
@@ -134,10 +113,10 @@ class Actor(nn.Module):
 class Critic(nn.Module):
     def __init__(self, states_dim, actions_dim):
         super(Critic, self).__init__()
-        # self.ln1 = nn.LayerNorm(states_dim)
+        self.ln1 = nn.LayerNorm(states_dim)
         self.fc1 = nn.Linear(states_dim, 200)
 
-        # self.ln2 = nn.LayerNorm(actions_dim)
+        self.ln2 = nn.LayerNorm(actions_dim)
         self.fc2 = nn.Linear(actions_dim, 200)
 
         self.ln3 = nn.LayerNorm(400)
@@ -152,12 +131,12 @@ class Critic(nn.Module):
     def forward(self, xs):
         x, a = xs
 
-        # out_x = self.ln1(x)
-        out_x = self.fc1(x)
+        out_x = self.ln1(x)
+        out_x = self.fc1(out_x)
         out_x = self.relu(out_x)
 
-        # out_a = self.ln2(a)
-        out_a = self.fc2(a)
+        out_a = self.ln2(a)
+        out_a = self.fc2(out_a)
         out_a = self.relu(out_a)
 
         out = self.ln3(torch.cat([out_x, out_a], 1))
@@ -168,32 +147,16 @@ class Critic(nn.Module):
         out = self.fc4(out)
         return out
 
-    def init_weights(self):
-        """
-        Weights init
-        """
-        self.fc1.weight.data = fanin_init(self.fc1.weight.data.size())
-        self.fc2.weight.data = fanin_init(self.fc2.weight.data.size())
-        self.fc3.weight.data = fanin_init(self.fc3.weight.data.size())
-        self.fc4.weight.data = fanin_init(self.fc4.weight.data.size())
-
     def get_params(self):
         """
         Returns parameters of the actor
         """
-        if USE_CUDA:
-            return deepcopy(np.hstack([v.data.cpu().numpy().flatten() for v in
-                                       self.parameters()]))
-        else:
-            return deepcopy(np.hstack([v.data.numpy().flatten() for v in
-                                       self.parameters()]))
+        return deepcopy(np.hstack([to_numpy(v).flatten() for v in
+                                   self.parameters()]))
 
     def get_params_grad(self):
-        if USE_CUDA:
-            return deepcopy(np.hstack([v.grad.data.cpu().numpy().flatten() for v in self.parameters()]))
-        else:
-            return deepcopy(np.hstack([v.grad.data.numpy().flatten() for v in
-                                       self.parameters()]))
+        return deepcopy(np.hstack([to_numpy(v.grad).flatten() for v in
+                                   self.parameters()]))
 
     def set_params(self, params):
         """
