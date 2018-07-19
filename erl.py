@@ -9,7 +9,7 @@ import pandas as pd
 from EA.GA import GA
 from EA.ES import OpenES, SNES
 from RL.DDPG.model import Actor, Critic
-from RL.DDPG.ddpg import DDPG
+from RL.DDPG.ddpg import DDPG, GESDDPG
 from RL.DDPG.util import *
 from memory import Memory
 from normalized_env import NormalizedEnv
@@ -77,7 +77,7 @@ def train_ea(n_episodes=1, debug=False, gen_index=0, render=False):
     for actor_params in actors_params:
         actor.set_params(actor_params)
         f, steps = evaluate(actor, n_episodes=n_episodes,
-                            noise=False, render=render, training=False)
+                            noise=False, render=render, training=True)
         batch_steps += steps
         fitness.append(f)
 
@@ -143,7 +143,7 @@ def train(n_gen, n_episodes, omega, output=None, debug=False, render=False):
         df.append({"total_steps": total_steps,
                    "best_score": best_score}, ignore_index=True)
 
-        # adding the current actor in the population
+        # adding the current actor in the populatione
         if (n + 1) % omega == 0:
             f, steps = evaluate(agent.get_actor(),
                                 n_episodes=n_episodes, noise=False)

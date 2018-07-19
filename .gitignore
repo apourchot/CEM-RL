@@ -1,3 +1,9 @@
+# vscode working dir
+.vscode/
+
+# saved files
+*.pkl
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

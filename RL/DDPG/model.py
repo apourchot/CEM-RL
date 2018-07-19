@@ -16,7 +16,7 @@ def fanin_init(size, fanin=None):
 class Actor(nn.Module):
     def __init__(self, states_dim, actions_dim):
         super(Actor, self).__init__()
-        self.ln1 = nn.LayerNorm(states_dim)
+        # self.ln1 = nn.LayerNorm(states_dim)
         self.fc1 = nn.Linear(states_dim, 128)
 
         self.ln2 = nn.LayerNorm(128)
@@ -27,8 +27,6 @@ class Actor(nn.Module):
 
         self.relu = nn.ReLU()
         self.tanh = nn.Tanh()
-
-        # self.init_weights()
 
     def init_weights(self):
         """
@@ -57,32 +55,58 @@ class Actor(nn.Module):
         """
         Returns parameters of the actor
         """
-        return deepcopy(np.hstack([v.numpy().flatten() for v in
-                                   self.state_dict().values()]))
+        return deepcopy(np.hstack([v.data.numpy().flatten() for v in
+                                   self.parameters()]))
 
-    def scale_params(self, scale):
-        """
-        Multiply all parameters by the scale
-        """
-        for param in self.parameters():
-            param.data.copy_(scale * param.data)
+    def get_params_grad(self):
+        return deepcopy(np.hstack([v.grad.data.numpy().flatten() for v in
+                                   self.parameters()]))
 
     def set_params(self, params):
         """
         Set the params of the network to the given parameters
         """
-        state_dict = self.state_dict()
         cpt = 0
-
-        # putting parameters in the right shape
-        for k, v in zip(state_dict.keys(), state_dict.values()):
-            tmp = np.product(v.size())
-            state_dict[k] = torch.from_numpy(
-                params[cpt:cpt + tmp]).view(v.size())
+        for param in self.parameters():
+            tmp = np.product(param.size())
+            param.data.copy_(torch.from_numpy(
+                params[cpt:cpt + tmp]).view(param.size()))
             cpt += tmp
 
-        # setting parameters of the network
-        self.load_state_dict(state_dict)
+    def set_params_grad(self, params):
+        """
+        Set the params gradient
+        """
+        cpt = 0
+        for param in self.parameters():
+            tmp = np.product(param.size())
+            param.grad.data.copy_(torch.from_numpy(
+                params[cpt:cpt + tmp]).view(param.size()))
+            cpt += tmp
+
+    def scale_params(self, scale):
+        """
+        Multiply all parameters by the given scale
+        """
+        for param in self.parameters():
+            param.data.copy_(scale * param.data)
+
+    # def set_params(self, params):
+    #     """
+    #     Set the params of the network to the given parameters
+    #     """
+    #     state_dict = self.state_dict()
+    #     cpt = 0
+    # 
+    #     # putting parameters in the right shape
+    #     for k, v in zip(state_dict.keys(), state_dict.values()):
+    #         tmp = np.product(v.size())
+    #         state_dict[k] = torch.from_numpy(
+    #             params[cpt:cpt + tmp]).view(v.size())
+    #         cpt += tmp
+    # 
+    #     # setting parameters of the network
+    #     self.load_state_dict(state_dict)
 
     def load_model(self, filename):
         """
@@ -108,10 +132,10 @@ class Actor(nn.Module):
 class Critic(nn.Module):
     def __init__(self, states_dim, actions_dim):
         super(Critic, self).__init__()
-        self.ln1 = nn.LayerNorm(states_dim)
+        # self.ln1 = nn.LayerNorm(states_dim)
         self.fc1 = nn.Linear(states_dim, 200)
 
-        self.ln2 = nn.LayerNorm(actions_dim)
+        # self.ln2 = nn.LayerNorm(actions_dim)
         self.fc2 = nn.Linear(actions_dim, 200)
 
         self.ln3 = nn.LayerNorm(400)
@@ -150,6 +174,46 @@ class Critic(nn.Module):
         self.fc2.weight.data = fanin_init(self.fc2.weight.data.size())
         self.fc3.weight.data = fanin_init(self.fc3.weight.data.size())
         self.fc4.weight.data = fanin_init(self.fc4.weight.data.size())
+
+    def get_params(self):
+        """
+        Returns parameters of the actor
+        """
+        return deepcopy(np.hstack([v.data.numpy().flatten() for v in
+                                   self.parameters()]))
+
+    def get_params_grad(self):
+        return deepcopy(np.hstack([v.grad.data.numpy().flatten() for v in
+                                   self.parameters()]))
+
+    def set_params(self, params):
+        """
+        Set the params of the network to the given parameters
+        """
+        cpt = 0
+        for param in self.parameters():
+            tmp = np.product(param.size())
+            param.data.copy_(torch.from_numpy(
+                params[cpt:cpt + tmp]).view(param.size()))
+            cpt += tmp
+
+    def set_params_grad(self, params):
+        """
+        Set the params gradient
+        """
+        cpt = 0
+        for param in self.parameters():
+            tmp = np.product(param.size())
+            param.grad.data.copy_(torch.from_numpy(
+                params[cpt:cpt + tmp]).view(param.size()))
+            cpt += tmp
+
+    def scale_params(self, scale):
+        """
+        Multiply all parameters by the given scale
+        """
+        for param in self.parameters():
+            param.data.copy_(scale * param.data)
 
     def load_model(self, filename):
         """
