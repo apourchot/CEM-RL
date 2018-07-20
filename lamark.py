@@ -47,7 +47,7 @@ def evaluate(actor, n_episodes=1, noise=False, render=False, training=False):
             obs = n_obs
 
             # train the DDPG agent if needed
-            if training:
+            if training and (steps % 5 == 0):
                 agent.train()
 
             # render if needed

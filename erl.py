@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+# !/usr/bin/env python3
 import argparse
 from copy import deepcopy
 
@@ -46,7 +46,7 @@ def evaluate(actor, n_episodes=1, noise=False, render=False, training=False):
             obs = n_obs
 
             # train the DDPG agent if needed
-            if training:
+            if training and (steps % 5 == 0):
                 agent.train()
 
             # render if needed
@@ -74,6 +74,7 @@ def train_ea(n_episodes=1, debug=False, gen_index=0, render=False):
 
     # evaluate all actors
     for actor_params in actors_params:
+
         actor.set_params(actor_params)
         f, steps = evaluate(actor, n_episodes=n_episodes,
                             noise=False, render=render, training=True)
@@ -102,7 +103,7 @@ def train_rl(gen_index=0, debug=False, render=False):
 
     # print scores
     if debug:
-        prCyan('Generation#{}: RL agent fitness:{}'.format(gen_index, f))
+        prCyan('Generation#{}: noisy RL agent fitness:{}'.format(gen_index, f))
 
     return steps
 
@@ -122,35 +123,37 @@ def train(n_gen, n_episodes, omega, output=None, debug=False, render=False):
         steps_rl = train_rl(gen_index=n, debug=debug, render=render)
         total_steps += steps_ea + steps_rl
 
+        # evaluate ddpg agent
+        f, steps = evaluate(agent.get_actor(), n_episodes=1,
+                            noise=False, render=render, training=False)
+        if debug:
+            prRed('Generation#{}: RL agent fitness:{}'.format(n, f))
+
         # printing scores
         if debug:
             prPurple('Generation#{}: Total steps:{} Best Score:{} \n'.format(
-                n, total_steps, ea.best_fitness()))
+                n, total_steps, max(ea.best_fitness(), f)))
 
         # saving model and scores
-        if n % 10 == 0:
-            best_actor_params = ea.best_actor()
-            best_actor = agent.get_actor()
-            best_actor.set_params(best_actor_params)
-            best_critic = agent.get_critic()
-            best_actor.save_model(output)
-            best_critic.save_model(output)
-            df.to_pickle(output + "/log.pkl")
+        best_actor_params = ea.best_actor()
+        best_actor = agent.get_actor()
+        best_actor.set_params(best_actor_params)
+        best_critic = agent.get_critic()
+        best_actor.save_model(output)
+        best_critic.save_model(output)
+        df.to_pickle(output + "/log.pkl")
 
         # saving scores
         best_score = ea.best_fitness()
-        df.append({"total_steps": total_steps,
-                   "best_score": best_score}, ignore_index=True)
+        df = df.append({"total_steps": total_steps,
+                        "best_score": best_score}, ignore_index=True)
 
-        # adding the current actor in the populatione
+        total_steps += steps
         if (n + 1) % omega == 0:
-            f, steps = evaluate(agent.get_actor(),
-                                n_episodes=n_episodes, noise=False)
-            total_steps += steps
 
             # printing score
             if debug:
-                prRed('Transfered RL agent into pop; fitness:{}\n'.format(f))
+                prRed('Transfered RL agent into pop')
 
             ea.add_ind(agent.get_actor_params(), f)
 
@@ -205,7 +208,7 @@ if __name__ == "__main__":
     parser.add_argument('--n_gen', default=100, type=int)
     parser.add_argument('--n_episodes', default=1, type=int)
     parser.add_argument('--omega', default=10, type=int)
-    parser.add_argument('--mem_size', default=6000000, type=int)
+    parser.add_argument('--mem_size', default=1000000, type=int)
 
     # Testing parameters
     parser.add_argument('--filename', default="", type=str)

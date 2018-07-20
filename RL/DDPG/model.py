@@ -26,11 +26,11 @@ class Actor(nn.Module):
         self.tanh = nn.Tanh()
 
         if USE_CUDA:
-            self.cuda
+            self.cuda()
 
     def forward(self, x):
 
-        # out = self.ln1(x)
+        # out = self.ln1(x)
         out = self.fc1(x)
         out = self.relu(out)
 
@@ -118,7 +118,7 @@ class Critic(nn.Module):
     def __init__(self, states_dim, actions_dim):
         super(Critic, self).__init__()
 
-        # self.ln1 = nn.LayerNorm(states_dim)
+        # self.ln1 = nn.LayerNorm(states_dim)
         self.fc1 = nn.Linear(states_dim, 200)
 
         # self.ln2 = nn.LayerNorm(actions_dim)
@@ -131,7 +131,8 @@ class Critic(nn.Module):
         self.fc4 = nn.Linear(300, 1)
         self.relu = nn.ReLU()
 
-        # self.init_weights()
+        if USE_CUDA:
+            self.cuda()
 
     def forward(self, xs):
         x, a = xs
