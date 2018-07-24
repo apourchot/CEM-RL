@@ -27,6 +27,8 @@ def evaluate(actor, n_episodes=1, noise=False, render=False, training=False):
 
     scores = []
     steps = 0
+    v_losses = [0]
+    p_losses = [0]
     for _ in range(n_episodes):
 
         score = 0
@@ -47,7 +49,9 @@ def evaluate(actor, n_episodes=1, noise=False, render=False, training=False):
 
             # train the DDPG agent if needed
             if training and (steps % 5 == 0):
-                agent.train()
+                v_loss, p_loss = agent.train()
+                v_losses.append(v_loss)
+                p_losses.append(p_loss)
 
             # render if needed
             if render:
@@ -59,7 +63,7 @@ def evaluate(actor, n_episodes=1, noise=False, render=False, training=False):
 
         scores.append(score)
 
-    return np.mean(scores), steps
+    return np.mean(scores), steps, np.mean(v_losses), np.mean(p_losses)
 
 
 def train_ea(n_episodes=1, debug=False, gen_index=0, render=False):
@@ -76,15 +80,16 @@ def train_ea(n_episodes=1, debug=False, gen_index=0, render=False):
     for actor_params in actors_params:
 
         actor.set_params(actor_params)
-        f, steps = evaluate(actor, n_episodes=n_episodes,
-                            noise=False, render=render, training=True)
+        f, steps, v_loss, p_loss = evaluate(actor, n_episodes=n_episodes,
+                                            noise=False, render=render, training=True)
         batch_steps += steps
         fitness.append(f)
 
         # print scores
         if debug:
             prLightPurple(
-                'Generation#{}: EA actor fitness:{}'.format(gen_index, f))
+                'Generation#{}: EA actor fitness:{}, losses:{}, {}'.format(
+                    gen_index, f, v_loss, p_loss))
 
     # update ea
     ea.tell(fitness)
@@ -98,12 +103,13 @@ def train_rl(gen_index=0, debug=False, render=False):
     """
 
     # evaluate actor and train
-    f, steps = evaluate(agent.get_actor(), n_episodes=1,
-                        noise=True, render=render, training=True)
+    f, steps, v_loss, p_loss = evaluate(agent.get_actor(), n_episodes=1,
+                                        noise=True, render=render, training=True)
 
     # print scores
     if debug:
-        prCyan('Generation#{}: noisy RL agent fitness:{}'.format(gen_index, f))
+        prCyan('Generation#{}: noisy RL agent fitness:{}, losses:{}, {}'.format(
+            gen_index, f, v_loss, p_loss))
 
     return steps
 
@@ -124,8 +130,8 @@ def train(n_gen, n_episodes, omega, output=None, debug=False, render=False):
         total_steps += steps_ea + steps_rl
 
         # evaluate ddpg agent
-        f, steps = evaluate(agent.get_actor(), n_episodes=1,
-                            noise=False, render=render, training=False)
+        f, steps, _, _ = evaluate(agent.get_actor(), n_episodes=1,
+                                  noise=False, render=render, training=False)
         if debug:
             prRed('Generation#{}: RL agent fitness:{}'.format(n, f))
 

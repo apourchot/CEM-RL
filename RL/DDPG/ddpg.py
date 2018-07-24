@@ -93,6 +93,8 @@ class DDPG(object):
         soft_update(self.actor_target, self.actor, self.tau)
         soft_update(self.critic_target, self.critic, self.tau)
 
+        return value_loss.detach().numpy(), policy_loss.detach().numpy()
+
     def eval(self):
         self.actor.eval()
         self.actor_target.eval()
