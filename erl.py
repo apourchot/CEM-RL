@@ -121,7 +121,7 @@ def train_rl(gen_index=0, debug=False, render=False,  n_batch=10):
     if debug:
         prRed('Generation#{}: RL agent fitness:{}'.format(gen_index, f))
 
-    return steps
+    return steps, f
 
 
 def train(n_gen, n_episodes, omega, output=None, debug=False, render=False):
@@ -136,14 +136,9 @@ def train(n_gen, n_episodes, omega, output=None, debug=False, render=False):
 
         steps_ea = train_ea(n_episodes=n_episodes,
                             gen_index=n, debug=debug, render=render)
-        steps_rl = train_rl(gen_index=n, debug=debug,
-                            render=render, n_batch=steps_ea)
+        steps_rl, f = train_rl(gen_index=n, debug=debug,
+                               render=render, n_batch=steps_ea)
         total_steps += steps_ea + steps_rl
-
-        # printing scores
-        if debug:
-            prPurple('Generation#{}: Total steps:{} Best Score:{} \n'.format(
-                n, total_steps, ea.best_fitness()))
 
         # saving model and scores
         best_actor_params = ea.best_actor()
@@ -155,9 +150,14 @@ def train(n_gen, n_episodes, omega, output=None, debug=False, render=False):
         df.to_pickle(output + "/log.pkl")
 
         # saving scores
-        best_score = ea.best_fitness()
+        best_score = max(ea.best_fitness(), f)
         df = df.append({"total_steps": total_steps,
                         "best_score": best_score}, ignore_index=True)
+
+        # printing scores
+        if debug:
+            prPurple('Generation#{}: Total steps:{} Best Score:{} \n'.format(
+                n, total_steps, ea.best_fitness()))
 
         if (n + 1) % omega == 0:
 
