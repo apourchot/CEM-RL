@@ -68,49 +68,32 @@ def train_ea(n_episodes=1, debug=False, gen_index=0, render=False):
     """
 
     batch_steps = 0
-    actors_params = ea.ask()
-    n_actors_params = []
+    actor = Actor(nb_states, nb_actions)
+    params = ea.ask()
     fitness = []
 
     # evaluate all actors
-    for actor_params in actors_params:
-        actor = Actor(nb_states, nb_actions)
+    for param in params:
+
+        actor_params = param[3:3 + actor_size]
         actor.set_params(actor_params)
-        f, steps, n_actor_params = train_rl(actor, render=render)
+        f, steps = evaluate(actor, n_episodes=n_episodes,
+                            noise=False, render=render, training=True)
         batch_steps += steps
         fitness.append(f)
-
-        # adding the final parameters to th elist
-        n_actors_params.append(n_actor_params)
 
         # print scores
         if debug:
             prLightPurple(
-                'Generation#{}: EA actor fitness:{}'.format(gen_index, f))
+                'Generation#{}: EA actor fitness:{}'.format(
+                    gen_index, f))
+
+        i += 1
 
     # update ea
-    ea.set_new_params(n_actors_params)
     ea.tell(fitness)
 
     return batch_steps
-
-
-def train_rl(actor, render=False):
-    """
-    Train the deep RL agent
-    """
-
-    # sets new actor in ddpg
-    agent.set_actor(actor)
-
-    # evaluate actor and train
-    f, steps = evaluate(actor, n_episodes=1,
-                        noise=False, render=render, training=True)
-
-    # gets parameters after training
-    n_actor_params = agent.actor.get_params()
-
-    return f, steps, n_actor_params
 
 
 def train(n_gen, n_episodes, output=None, debug=False, render=False):
@@ -123,9 +106,29 @@ def train(n_gen, n_episodes, output=None, debug=False, render=False):
 
     for n in range(n_gen):
 
+        # ea training
         steps_ea = train_ea(n_episodes=n_episodes,
                             gen_index=n, debug=debug, render=render)
         total_steps += steps_ea
+
+        # update king
+        best_params = ea.best_actor()
+        king_index = ea.best_index()
+
+        args.reward_scale = best_params[0]
+        args.actor_lr = best_params[1]
+        args.critic_lr = best_params[2]
+
+        if n % omega == 0:
+            global agent
+            agent = DDPG(nb_states, nb_actions, memory, args)
+            actor = Actor(nb_states, nb_actions)
+            actor.set_params(best_params[3:3 + actor_size])
+            agent.set_actor(actor)
+
+            critic = Critic(nb_states, nb_actions)
+            critic.set_params(best_params[-critic_size:])
+            agent.set_critic(critic)
 
         # printing scores
         if debug:
@@ -134,10 +137,15 @@ def train(n_gen, n_episodes, output=None, debug=False, render=False):
 
         # saving model and scores
         if n % 10 == 0:
-            best_actor_params = ea.best_actor()
-            best_actor = agent.get_actor()
+            best_params = ea.best_actor()
+            best_actor_params = best_params[3:3 + actor_size]
+            best_critic_params = best_params[-critic_size:]
+
+            best_actor = Actor(nb_states, nb_actions)
             best_actor.set_params(best_actor_params)
-            best_critic = agent.get_critic()
+            best_critic = Critic(nb_states, nb_actions)
+            best_critic.set_params(best_critic_params)
+
             best_actor.save_model(output)
             best_critic.save_model(output)
             df.to_pickle(output + "/log.pkl")
@@ -181,6 +189,7 @@ if __name__ == "__main__":
     parser.add_argument('--critic_lr', default=0.0001, type=float)
     parser.add_argument('--batch_size', default=128, type=int)
     parser.add_argument('--discount', default=0.99, type=float)
+    parser.add_argument('--reward_scale', default=1., type=float)
 
     # EA parameters
     parser.add_argument('--pop_size', default=10, type=int)
@@ -228,10 +237,20 @@ if __name__ == "__main__":
 
     # DDPG agent
     agent = DDPG(nb_states, nb_actions, memory, args)
+    actor_size = agent.get_actor_size()
+    critic_size = agent.get_critic_size()
 
     # EA process
-    ea = GA(agent.get_actor_size(), pop_size=args.pop_size, mut_amp=args.mut_amp, mut_rate=args.mut_rate,
-            elite_frac=args.elite_frac, generator=lambda: Actor(nb_states, nb_actions).get_params())
+    def generator():
+        return np.hstack((np.random.rand(), np.exp(np.random.uniform(low=-5, high=-1) * 2.3),
+                          np.exp(np.random.uniform(
+                              low=-5, high=-1) * 2.3),
+                          Actor(nb_states, nb_actions).get_params(),
+                          Critic(nb_states, nb_actions).get_params()
+                          ))
+
+    ea = GA(3 + actor_size + critic_size, pop_size=args.pop_size, mut_amp=args.mut_amp,
+            mut_rate=args.mut_rate, elite_frac=args.elite_frac, generator=generator)
 
     # Trying ES type algorithms, but without much success
     # ea = OpenES(agent.get_actor_size(), pop_size=args.pop_size, mut_amp=args.mut_amp,

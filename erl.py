@@ -5,8 +5,9 @@ from copy import deepcopy
 import gym
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
-from EA.GA import GA
+from EA.GA import GA, GAv2
 from RL.DDPG.model import Actor, Critic
 from RL.DDPG.ddpg import DDPG, GESDDPG
 from RL.DDPG.util import *
@@ -81,7 +82,7 @@ def train_ea(n_episodes=1, debug=False, gen_index=0, render=False):
 
         actor.set_params(actor_params)
         f, steps, v_loss, p_loss = evaluate(actor, n_episodes=n_episodes,
-                                            noise=False, render=render, training=True)
+                                            noise=False, render=render, training=False)
         batch_steps += steps
         fitness.append(f)
 
@@ -97,12 +98,12 @@ def train_ea(n_episodes=1, debug=False, gen_index=0, render=False):
     return batch_steps
 
 
-def train_rl(gen_index=0, debug=False, render=False):
+def train_rl(gen_index=0, debug=False, render=False,  n_batch=10):
     """
     Train the deep RL agent
     """
 
-    # evaluate actor and train
+    # noisy ddpg agent
     f, steps, v_loss, p_loss = evaluate(agent.get_actor(), n_episodes=1,
                                         noise=True, render=render, training=True)
 
@@ -110,6 +111,15 @@ def train_rl(gen_index=0, debug=False, render=False):
     if debug:
         prCyan('Generation#{}: noisy RL agent fitness:{}, losses:{}, {}'.format(
             gen_index, f, v_loss, p_loss))
+
+    for i in tqdm(range(n_batch)):
+        agent.train()
+
+    # evaluate ddpg agent
+    f, _, _, _ = evaluate(agent.get_actor(), n_episodes=1,
+                          noise=False, render=render, training=False)
+    if debug:
+        prRed('Generation#{}: RL agent fitness:{}'.format(gen_index, f))
 
     return steps
 
@@ -126,19 +136,14 @@ def train(n_gen, n_episodes, omega, output=None, debug=False, render=False):
 
         steps_ea = train_ea(n_episodes=n_episodes,
                             gen_index=n, debug=debug, render=render)
-        steps_rl = train_rl(gen_index=n, debug=debug, render=render)
+        steps_rl = train_rl(gen_index=n, debug=debug,
+                            render=render, n_batch=steps_ea)
         total_steps += steps_ea + steps_rl
-
-        # evaluate ddpg agent
-        f, steps, _, _ = evaluate(agent.get_actor(), n_episodes=1,
-                                  noise=False, render=render, training=False)
-        if debug:
-            prRed('Generation#{}: RL agent fitness:{}'.format(n, f))
 
         # printing scores
         if debug:
             prPurple('Generation#{}: Total steps:{} Best Score:{} \n'.format(
-                n, total_steps, max(ea.best_fitness(), f)))
+                n, total_steps, ea.best_fitness()))
 
         # saving model and scores
         best_actor_params = ea.best_actor()
@@ -154,7 +159,6 @@ def train(n_gen, n_episodes, omega, output=None, debug=False, render=False):
         df = df.append({"total_steps": total_steps,
                         "best_score": best_score}, ignore_index=True)
 
-        total_steps += steps
         if (n + 1) % omega == 0:
 
             # printing score
@@ -174,8 +178,8 @@ def test(n_test, filename, debug=False, render=False):
     actor.load_model(filename)
 
     # evaluate
-    f, _ = evaluate(actor, n_episodes=n_test,
-                    noise=False, render=render)
+    f, _, _, _ = evaluate(actor, n_episodes=n_test,
+                          noise=False, render=render)
 
     # print scores
     if debug:
@@ -197,6 +201,7 @@ if __name__ == "__main__":
     parser.add_argument('--critic_lr', default=0.0005, type=float)
     parser.add_argument('--batch_size', default=128, type=int)
     parser.add_argument('--discount', default=0.99, type=float)
+    parser.add_argument('--reward_scale', default=1., type=float)
 
     # EA parameters
     parser.add_argument('--pop_size', default=10, type=int)
@@ -246,8 +251,8 @@ if __name__ == "__main__":
     agent = DDPG(nb_states, nb_actions, memory, args)
 
     # EA process
-    ea = GA(agent.get_actor_size(), pop_size=args.pop_size, mut_amp=args.mut_amp, mut_rate=args.mut_rate,
-            elite_frac=args.elite_frac, generator=lambda: Actor(nb_states, nb_actions).get_params())
+    ea = GAv2(agent.get_actor_size(), pop_size=args.pop_size, mut_amp=args.mut_amp, mut_rate=args.mut_rate,
+              elite_frac=args.elite_frac, generator=lambda: Actor(nb_states, nb_actions).get_params())
 
     # Trying ES type algorithms, but without much success
     # ea = OpenES(agent.get_actor_size(), pop_size=args.pop_size, mut_amp=args.mut_amp,

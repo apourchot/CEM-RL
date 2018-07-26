@@ -2,7 +2,7 @@ from copy import deepcopy
 
 import torch
 import torch.nn as nn
-from torch.optim import Adam
+from torch.optim import Adam, SGD
 import numpy as np
 
 from RL.DDPG.model import Actor, Critic
@@ -24,11 +24,15 @@ class DDPG(object):
         # Create Actor and Critic Network
         self.actor = Actor(self.nb_states, self.nb_actions)
         self.actor_target = Actor(self.nb_states, self.nb_actions)
-        self.actor_optim = Adam(self.actor.parameters(), lr=args.actor_lr)
+        self.actor_optim = Adam(self.actor.parameters(),
+                                lr=np.abs(args.actor_lr))
+        self.actor_lr = args.actor_lr
 
         self.critic = Critic(self.nb_states, self.nb_actions)
         self.critic_target = Critic(self.nb_states, self.nb_actions)
-        self.critic_optim = Adam(self.critic.parameters(), lr=args.critic_lr)
+        self.critic_optim = Adam(self.critic.parameters(),
+                                 lr=np.abs(args.critic_lr))
+        self.critic_lr = args.critic_lr
 
         # scale the actor parameters
         self.actor.scale_params(0.1)
@@ -43,7 +47,7 @@ class DDPG(object):
             nb_actions, theta=args.ou_theta, mu=args.ou_mu, sigma=args.ou_sigma)
 
         # hyper-parameters
-        self.reward_scale = 1.
+        self.reward_scale = args.reward_scale
         self.batch_size = args.batch_size
         self.tau = args.tau
         self.discount = args.discount
@@ -75,7 +79,8 @@ class DDPG(object):
 
         q_batch = self.critic([state_batch, action_batch])
 
-        value_loss = criterion(q_batch, target_q_batch)
+        value_loss = criterion(q_batch, target_q_batch) * \
+            np.sign(self.critic_lr)
         value_loss.backward()
 
         self.critic_optim.step()
@@ -83,7 +88,9 @@ class DDPG(object):
         # Actor update
         self.actor_optim.zero_grad()
 
-        policy_loss = -1. * self.critic([state_batch, self.actor(state_batch)])
+        policy_loss = -1. * \
+            self.critic([state_batch, self.actor(state_batch)]) * \
+            np.sign(self.actor_lr)
 
         policy_loss = policy_loss.mean()
         policy_loss.backward()
@@ -110,6 +117,9 @@ class DDPG(object):
     def get_actor_size(self):
         return np.shape(self.get_actor_params())[0]
 
+    def get_critic_size(self):
+        return np.shape(self.get_critic_params())[0]
+
     def get_actor(self):
         return deepcopy(self.actor)
 
@@ -119,8 +129,14 @@ class DDPG(object):
     def get_critic(self):
         return deepcopy(self.critic)
 
+    def set_critic(self, critic):
+        self.critic = critic
+
     def get_actor_params(self):
         return self.actor.get_params()
+
+    def get_critic_params(self):
+        return self.critic.get_params()
 
     def random_action(self):
         action = np.random.uniform(-1., 1., self.nb_actions)
