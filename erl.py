@@ -14,6 +14,11 @@ from random_process import *
 from util import *
 from memory import Memory
 
+if torch.cuda.is_available():
+    FloatTensor = torch.cuda.FloatTensor
+else:
+    FloatTensor = torch.FloatTensor
+
 
 def evaluate(actor, n_episodes=1, random=False, train=False, noise=None, render=False, add_memory=True):
     """
@@ -22,7 +27,7 @@ def evaluate(actor, n_episodes=1, random=False, train=False, noise=None, render=
 
     if not random:
         def policy(state):
-            state = torch.FloatTensor(
+            state = FloatTensor(
                 state.reshape(-1, state_dim))
             action = actor(state).cpu().data.numpy().flatten()
 
