@@ -270,7 +270,7 @@ if __name__ == "__main__":
     # DDPG agent
     a_noise = OrnsteinUhlenbeckProcess(
         action_dim, mu=args.ou_mu, theta=args.ou_theta, sigma=args.ou_sigma)
-    agent = DDPG(state_dim, action_dim, max_action, memory, args)
+    agent = TD3(state_dim, action_dim, max_action, memory, args)
 
     # EA process
     ea = GA(agent.actor.get_size(), pop_size=args.pop_size, mut_amp=args.mut_amp, mut_rate=args.mut_rate,

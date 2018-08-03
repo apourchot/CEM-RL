@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 
-from models import Actor, CriticTD3
+from models import ActorERL as Actor, CriticTD3ERL as CriticTD3
 
 # https://github.com/sfujim/TD3/edit/master/TD3.py
 # Implementation of Twin Delayed Deep Deterministic Policy Gradients (TD3)
@@ -18,16 +18,16 @@ class TD3(object):
     def __init__(self, state_dim, action_dim, max_action, memory, args):
 
         # actor
-        self.actor = Actor(state_dim, action_dim, max_action, args.layer_norm)
+        self.actor = Actor(state_dim, action_dim, max_action, init=True)
         self.actor_target = Actor(
-            state_dim, action_dim, max_action, args.layer_norm)
+            state_dim, action_dim, max_action, init=True)
         self.actor_target.load_state_dict(self.actor.state_dict())
         self.actor_optimizer = torch.optim.Adam(
             self.actor.parameters(), lr=args.actor_lr)
 
         # critic
-        self.critic = CriticTD3(state_dim, action_dim, args.layer_norm)
-        self.critic_target = CriticTD3(state_dim, action_dim, args.layer_norm)
+        self.critic = CriticTD3(state_dim, action_dim)
+        self.critic_target = CriticTD3(state_dim, action_dim)
         self.critic_target.load_state_dict(self.critic.state_dict())
         self.critic_optimizer = torch.optim.Adam(
             self.critic.parameters(), lr=args.critic_lr)

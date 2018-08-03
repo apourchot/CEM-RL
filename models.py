@@ -414,3 +414,97 @@ class CriticTD3(nn.Module):
             self.state_dict(),
             '{}/actor.pkl'.format(output)
         )
+
+
+class CriticTD3ERL(nn.Module):
+    def __init__(self, state_dim, action_dim):
+        super(CriticTD3ERL, self).__init__()
+
+        # Q1 architecture
+        self.l1 = nn.Linear(state_dim, 128)
+        self.l2 = nn.Linear(action_dim, 128)
+
+        self.l3 = nn.Linear(256, 256)
+        self.n3 = nn.LayerNorm(256)
+
+        self.l4 = nn.Linear(256, 1)
+        self.l4.weight.data.mul_(0.1)
+        self.l4.bias.data.mul_(0.1)
+
+        # Q2 architecture
+        self.l5 = nn.Linear(state_dim, 128)
+        self.l6 = nn.Linear(action_dim, 128)
+
+        self.l7 = nn.Linear(256, 256)
+        self.n7 = nn.LayerNorm(256)
+
+        self.l8 = nn.Linear(256, 1)
+        self.l8.weight.data.mul_(0.1)
+        self.l8.bias.data.mul_(0.1)
+
+    def forward(self, x, u):
+
+        x1 = F.elu(self.l1(x))
+        u1 = F.elu(self.l2(u))
+        x1 = torch.cat((x1, u1), 1)
+
+        x1 = F.elu(self.n3(self.l3(x1)))
+        x1 = self.l4(x1)
+
+        x2 = F.elu(self.l5(x))
+        u2 = F.elu(self.l6(u))
+        x2 = torch.cat((x2, u2), 1)
+
+        x2 = F.elu(self.n7(self.l7(x2)))
+        x2 = self.l8(x2)
+
+        return x1, x2
+
+    def set_params(self, params):
+        """
+        Set the params of the network to the given parameters
+        """
+        cpt = 0
+        for param in self.parameters():
+            tmp = np.product(param.size())
+
+            if torch.cuda.is_available():
+                param.data.copy_(torch.from_numpy(
+                    params[cpt:cpt + tmp]).view(param.size()).cuda())
+            else:
+                param.data.copy_(torch.from_numpy(
+                    params[cpt:cpt + tmp]).view(param.size()))
+            cpt += tmp
+
+    def get_params(self):
+        """
+        Returns parameters of the actor
+        """
+        return deepcopy(np.hstack([to_numpy(v).flatten() for v in
+                                   self.parameters()]))
+
+    def get_size(self):
+        """
+        Returns the number of parameters of the network
+        """
+        return self.get_params().shape[0]
+
+    def load_model(self, filename):
+        """
+        Loads the model
+        """
+        if filename is None:
+            return
+
+        self.load_state_dict(
+            torch.load('{}/actor.pkl'.format(filename))
+        )
+
+    def save_model(self, output):
+        """
+        Saves the model
+        """
+        torch.save(
+            self.state_dict(),
+            '{}/actor.pkl'.format(output)
+        )
