@@ -14,7 +14,8 @@ from random_process import *
 from util import *
 from memory import Memory
 
-if torch.cuda.is_available():
+USE_CUDA = torch.cuda.is_available()
+if USE_CUDA:
     FloatTensor = torch.cuda.FloatTensor
 else:
     FloatTensor = torch.FloatTensor
@@ -86,6 +87,8 @@ def train_ea(n_episodes=1, debug=False, render=False):
 
     batch_steps = 0
     actor = Actor(state_dim, action_dim, max_action)
+    if USE_CUDA:
+        actor.cuda()
     actors_params = ea.ask()
     fitness = []
 
@@ -176,6 +179,8 @@ def test(n_test, filename, debug=False, render=False):
 
     # load weights
     actor = Actor(state_dim, action_dim, max_action)
+    if USE_CUDA:
+        actor.cuda()
     actor.load_model(filename)
 
     # evaluate
