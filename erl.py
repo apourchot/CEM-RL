@@ -169,7 +169,7 @@ def train(n_gen, n_episodes, omega, output=None, debug=False, render=False):
         if (n + 1) % omega == 0 and args.pop_size > 0:
             if debug:
                 prRed('Transfered RL agent into pop')
-            ea.add_ind(agent.get_actor_params(), f)
+            ea.add_ind(agent.actor.get_params(), f)
 
 
 def test(n_test, filename, debug=False, render=False):
