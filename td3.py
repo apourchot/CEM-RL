@@ -8,6 +8,11 @@ from models import Actor, CriticTD3
 # https://github.com/sfujim/TD3/edit/master/TD3.py
 # Implementation of Twin Delayed Deep Deterministic Policy Gradients (TD3)
 
+if torch.cuda.is_available():
+    FloatTensor = torch.cuda.FloatTensor
+else:
+    FloatTensor = torch.FloatTensor
+
 
 class TD3(object):
     def __init__(self, state_dim, action_dim, max_action, memory, args):
@@ -50,7 +55,7 @@ class TD3(object):
         self.policy_freq = args.policy_freq
 
     def select_action(self, state, noise=None):
-        state = torch.FloatTensor(
+        state = FloatTensor(
             state.reshape(-1, self.state_dim))
         action = self.actor(state).cpu().data.numpy().flatten()
 
@@ -65,24 +70,25 @@ class TD3(object):
 
             # Sample replay buffer
             x, y, u, r, d = self.memory.sample(self.batch_size)
-            state = torch.FloatTensor(x)
-            action = torch.FloatTensor(u)
-            next_state = torch.FloatTensor(y)
-            done = torch.FloatTensor(1 - d)
-            reward = torch.FloatTensor(r)
+            state = FloatTensor(x)
+            action = FloatTensor(u)
+            next_state = FloatTensor(y)
+            done = FloatTensor(1 - d)
+            reward = FloatTensor(r)
 
             # Select action according to policy and add clipped noise
             noise = np.clip(np.random.normal(0, self.policy_noise, size=(
                 self.batch_size, self.action_dim)), -self.noise_clip, self.noise_clip)
             next_action = self.actor_target(
-                next_state) + torch.FloatTensor(noise)
+                next_state) + FloatTensor(noise)
             next_action = next_action.clamp(-self.max_action, self.max_action)
 
             # Q target = reward + discount * min_i(Qi(next_state, pi(next_state)))
-            target_Q1, target_Q2 = self.critic_target(next_state, next_action)
-            target_Q = torch.min(target_Q1, target_Q2)
-            target_Q = reward + (done * self.discount * target_Q)
-            target_Q = target_Q.detach()
+            with torch.no_grad():
+                target_Q1, target_Q2 = self.critic_target(
+                    next_state, next_action)
+                target_Q = torch.min(target_Q1, target_Q2)
+                target_Q = reward + (done * self.discount * target_Q)
 
             # Get current Q estimates
             current_Q1, current_Q2 = self.critic(state, action)

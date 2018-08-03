@@ -10,6 +10,11 @@ from models import CriticERL as Critic
 # Re-tuned version of Deep Deterministic Policy Gradients (DDPG)
 # Paper: https://arxiv.org/abs/1509.02971
 
+if torch.cuda.is_available():
+    FloatTensor = torch.cuda.FloatTensor
+else:
+    FloatTensor = torch.FloatTensor
+
 
 class DDPG(object):
     def __init__(self, state_dim, action_dim, max_action, memory, args):
@@ -49,7 +54,7 @@ class DDPG(object):
         self.batch_size = args.batch_size
 
     def select_action(self, state, noise=None):
-        state = torch.FloatTensor(
+        state = FloatTensor(
             state.reshape(-1, self.state_dim))
         action = self.actor(state).cpu().data.numpy().flatten()
 
@@ -64,11 +69,11 @@ class DDPG(object):
 
             # Sample replay buffer
             x, y, u, r, d = self.memory.sample(self.batch_size)
-            state = torch.FloatTensor(x)
-            action = torch.FloatTensor(u)
-            next_state = torch.FloatTensor(y)
-            done = torch.FloatTensor(1 - d)
-            reward = torch.FloatTensor(r)
+            state = FloatTensor(x)
+            action = FloatTensor(u)
+            next_state = FloatTensor(y)
+            done = FloatTensor(1 - d)
+            reward = FloatTensor(r)
 
             # Q target = reward + discount * Q(next_state, pi(next_state))
             with torch.no_grad():
