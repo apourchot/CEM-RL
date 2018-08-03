@@ -1,54 +1,35 @@
-# from https://github.com/ChenglongChen/pytorch-madrl/blob/master/common/Memory.py
-from collections import namedtuple
-import random
+import numpy as np
 
-Experience = namedtuple("Experience",
-                        ("states", "actions", "rewards", "next_states", "dones"))
+# Code based on:
+# https://github.com/openai/baselines/blob/master/baselines/deepq/replay_buffer.py
+
+# Simple replay buffer
 
 
 class Memory(object):
-    """
-    Replay memory buffer
-    """
-
-    def __init__(self, capacity):
-        self.capacity = capacity
-        self.memory = []
+    def __init__(self, max_size):
+        self.max_size = max_size
+        self.storage = [None] * max_size
         self.position = 0
+        self.filled = 0
 
-    def _append_one(self, state, action, reward, next_state=None, done=None):
-        """
-        Add one element
-        """
-        if len(self.memory) < self.capacity:
-            self.memory.append(None)
-        self.memory[self.position] = Experience(
-            state, action, reward, next_state, done)
-        self.position = (self.position + 1) % self.capacity
+    # Expects tuples of (state, next_state, action, reward, done)
+    def add(self, data):
+        self.storage[self.position] = data
+        self.position = (self.position + 1) % self.max_size
+        self.filled = min(self.filled + 1, self.max_size)
 
-    def append(self, states, actions, rewards, next_states=None, dones=None):
-        """
-        Add elements
-        """
-        if isinstance(states, list):
-            if next_states is not None and len(next_states) > 0:
-                for s, a, r, n_s, d in zip(states, actions, rewards, next_states, dones):
-                    self._append_one(s, a, r, n_s, d)
-            else:
-                for s, a, r in zip(states, actions, rewards):
-                    self._append_one(s, a, r)
-        else:
-            self._append_one(states, actions, rewards, next_states, dones)
+    def sample(self, batch_size=100):
+        ind = np.random.randint(
+            0, self.filled, size=min(batch_size, self.filled))
+        x, y, u, r, d = [], [], [], [], []
 
-    def sample(self, batch_size):
-        """
-        Sample a batch
-        """
-        if batch_size > len(self.memory):
-            batch_size = len(self.memory)
-        transitions = random.sample(self.memory, batch_size)
-        batch = Experience(*zip(*transitions))
-        return batch
+        for i in ind:
+            X, Y, U, R, D = self.storage[i]
+            x.append(np.array(X, copy=False))
+            y.append(np.array(Y, copy=False))
+            u.append(np.array(U, copy=False))
+            r.append(np.array(R, copy=False))
+            d.append(np.array(D, copy=False))
 
-    def __len__(self):
-        return len(self.memory)
+        return np.array(x), np.array(y), np.array(u), np.array(r).reshape(-1, 1), np.array(d).reshape(-1, 1)

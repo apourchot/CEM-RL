@@ -5,31 +5,39 @@ from copy import deepcopy
 import gym
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
 
-from EA.GA import GA, GAv2
-from RL.DDPG.model import Actor, Critic
-from RL.DDPG.ddpg import DDPG, GESDDPG
-from RL.DDPG.util import *
+from GA import GA
+from models import ActorERL as Actor
+from ddpg import DDPG
+from td3 import TD3
+from random_process import *
+from util import *
 from memory import Memory
-from normalized_env import NormalizedEnv
 
 
-def evaluate(actor, n_episodes=1, noise=False, render=False, training=False):
+def evaluate(actor, n_episodes=1, random=False, train=False, noise=None, render=False, add_memory=True):
     """
     Computes the score of an actor on a given number of runs
     """
 
-    def policy(obs):
-        action = to_numpy(actor(to_tensor(np.array([obs])))).squeeze(0)
-        if noise:
-            action += agent.random_process.sample()
-        return action
+    if not random:
+        def policy(state):
+            state = torch.FloatTensor(
+                state.reshape(-1, state_dim))
+            action = actor(state).cpu().data.numpy().flatten()
+
+            if noise is not None:
+                action += noise.sample()
+
+            return np.clip(action, -max_action, max_action)
+
+    else:
+        def policy(state):
+            return env.action_space.sample()
 
     scores = []
     steps = 0
-    v_losses = [0]
-    p_losses = [0]
+
     for _ in range(n_episodes):
 
         score = 0
@@ -45,14 +53,9 @@ def evaluate(actor, n_episodes=1, noise=False, render=False, training=False):
             steps += 1
 
             # adding in memory
-            memory.append(obs, action, reward, deepcopy(n_obs), done)
+            if add_memory:
+                memory.add((obs, n_obs, action, reward, done))
             obs = n_obs
-
-            # train the DDPG agent if needed
-            if training and (steps % 5 == 0):
-                v_loss, p_loss = agent.train()
-                v_losses.append(v_loss)
-                p_losses.append(p_loss)
 
             # render if needed
             if render:
@@ -62,18 +65,22 @@ def evaluate(actor, n_episodes=1, noise=False, render=False, training=False):
             if done:
                 env.reset()
 
+        # training agent
+        if train:
+            agent.train(steps)
+
         scores.append(score)
 
-    return np.mean(scores), steps, np.mean(v_losses), np.mean(p_losses)
+    return np.mean(scores), steps
 
 
-def train_ea(n_episodes=1, debug=False, gen_index=0, render=False):
+def train_ea(n_episodes=1, debug=False, render=False):
     """
-    Train EA process
+    Train the EA process
     """
 
     batch_steps = 0
-    actor = Actor(nb_states, nb_actions)
+    actor = Actor(state_dim, action_dim, max_action)
     actors_params = ea.ask()
     fitness = []
 
@@ -81,16 +88,14 @@ def train_ea(n_episodes=1, debug=False, gen_index=0, render=False):
     for actor_params in actors_params:
 
         actor.set_params(actor_params)
-        f, steps, v_loss, p_loss = evaluate(actor, n_episodes=n_episodes,
-                                            noise=False, render=render, training=False)
+        f, steps = evaluate(actor, n_episodes=n_episodes,
+                            render=render, train=True)
         batch_steps += steps
         fitness.append(f)
 
         # print scores
         if debug:
-            prLightPurple(
-                'Generation#{}: EA actor fitness:{}, losses:{}, {}'.format(
-                    gen_index, f, v_loss, p_loss))
+            prLightPurple('EA actor fitness:{}'.format(f))
 
     # update ea
     ea.tell(fitness)
@@ -98,28 +103,26 @@ def train_ea(n_episodes=1, debug=False, gen_index=0, render=False):
     return batch_steps
 
 
-def train_rl(gen_index=0, debug=False, render=False,  n_batch=10):
+def train_rl(n_episodes=1, debug=False, render=False, random=False):
     """
     Train the deep RL agent
     """
 
     # noisy ddpg agent
-    f, steps, v_loss, p_loss = evaluate(agent.get_actor(), n_episodes=1,
-                                        noise=True, render=render, training=True)
+    f, steps = evaluate(agent.actor, n_episodes=n_episodes,
+                        noise=a_noise, render=render, random=random, train=True)
 
-    # print scores
+    # print score
     if debug:
-        prCyan('Generation#{}: noisy RL agent fitness:{}, losses:{}, {}'.format(
-            gen_index, f, v_loss, p_loss))
-
-    for i in tqdm(range(n_batch)):
-        agent.train()
+        prCyan('noisy RL agent fitness:{}'.format(f))
 
     # evaluate ddpg agent
-    f, _, _, _ = evaluate(agent.get_actor(), n_episodes=1,
-                          noise=False, render=render, training=False)
+    f, _ = evaluate(agent.actor, n_episodes=n_episodes,
+                    render=render, add_memory=False)
+
+    # print score
     if debug:
-        prRed('Generation#{}: RL agent fitness:{}'.format(gen_index, f))
+        prRed('RL agent fitness:{}'.format(f))
 
     return steps, f
 
@@ -134,37 +137,30 @@ def train(n_gen, n_episodes, omega, output=None, debug=False, render=False):
 
     for n in range(n_gen):
 
+        random = total_steps < args.start_steps
         steps_ea = train_ea(n_episodes=n_episodes,
-                            gen_index=n, debug=debug, render=render)
-        steps_rl, f = train_rl(gen_index=n, debug=debug,
-                               render=render, n_batch=steps_ea)
-        total_steps += steps_ea + steps_rl
+                            debug=debug, render=render)
+        steps_rl, f = train_rl(n_episodes=n_episodes, debug=debug,
+                               render=render, random=random)
+        total_steps += steps_rl + steps_ea
 
         # saving model and scores
-        best_actor_params = ea.best_actor()
-        best_actor = agent.get_actor()
-        best_actor.set_params(best_actor_params)
-        best_critic = agent.get_critic()
-        best_actor.save_model(output)
-        best_critic.save_model(output)
+        agent.save(output)
         df.to_pickle(output + "/log.pkl")
 
         # saving scores
-        best_score = max(ea.best_fitness(), f)
+        best_score = f
         df = df.append({"total_steps": total_steps,
                         "best_score": best_score}, ignore_index=True)
 
-        # printing scores
+        # printing generation resume
         if debug:
-            prPurple('Generation#{}: Total steps:{} Best Score:{} \n'.format(
-                n, total_steps, ea.best_fitness()))
+            prPurple('Generation#{}: Total steps:{}\n'.format(n, total_steps))
 
-        if (n + 1) % omega == 0:
-
-            # printing score
+        # adding agent to population
+        if (n + 1) % omega == 0 and args.pop_size > 0:
             if debug:
                 prRed('Transfered RL agent into pop')
-
             ea.add_ind(agent.get_actor_params(), f)
 
 
@@ -174,12 +170,12 @@ def test(n_test, filename, debug=False, render=False):
     """
 
     # load weights
-    actor = Actor(nb_states, nb_actions)
+    actor = Actor(state_dim, action_dim, max_action)
     actor.load_model(filename)
 
     # evaluate
-    f, _, _, _ = evaluate(actor, n_episodes=n_test,
-                          noise=False, render=render)
+    f, _ = evaluate(actor, n_episodes=n_test,
+                    noise=False, render=render)
 
     # print scores
     if debug:
@@ -193,15 +189,21 @@ if __name__ == "__main__":
 
     parser.add_argument('--mode', default='train', type=str,)
     parser.add_argument('--env', default='HalfCheetah-v2', type=str)
+    parser.add_argument('--start_steps', default=10000, type=int)
 
     # DDPG parameters
-    parser.add_argument('--hidden1', default=400, type=int)
-    parser.add_argument('--hidden2', default=300, type=int)
     parser.add_argument('--actor_lr', default=0.00005, type=float)
     parser.add_argument('--critic_lr', default=0.0005, type=float)
     parser.add_argument('--batch_size', default=128, type=int)
     parser.add_argument('--discount', default=0.99, type=float)
     parser.add_argument('--reward_scale', default=1., type=float)
+    parser.add_argument('--tau', default=0.005, type=float)
+    parser.add_argument('--layer_norm', dest='layer_norm', action='store_true')
+
+    # TD3 parameters
+    parser.add_argument('--policy_noise', default=0.2, type=float)
+    parser.add_argument('--noise_clip', default=0.5, type=float)
+    parser.add_argument('--policy_freq', default=2, type=int)
 
     # EA parameters
     parser.add_argument('--pop_size', default=10, type=int)
@@ -209,11 +211,18 @@ if __name__ == "__main__":
     parser.add_argument('--mut_rate', default=0.9, type=float)
     parser.add_argument('--mut_amp', default=0.1, type=float)
 
-    # Noise process parameters
-    parser.add_argument('--tau', default=0.001, type=float)
+    # Gaussian noise parameters
+    parser.add_argument('--gauss_sigma', default=0.1, type=float)
+
+    # Action noise OU process parameters
     parser.add_argument('--ou_theta', default=0.15, type=float)
     parser.add_argument('--ou_sigma', default=0.2, type=float)
     parser.add_argument('--ou_mu', default=0.0, type=float)
+
+    # Parameter noise parameters
+    parser.add_argument('--param_init_std', default=0.01, type=float)
+    parser.add_argument('--param_scale', default=0.2, type=float)
+    parser.add_argument('--param_adapt', default=1.01, type=float)
 
     # Training parameters
     parser.add_argument('--n_gen', default=100, type=int)
@@ -235,9 +244,10 @@ if __name__ == "__main__":
     args.output = get_output_folder(args.output, args.env)
 
     # The environment
-    env = NormalizedEnv(gym.make(args.env))
-    nb_states = env.observation_space.shape[0]
-    nb_actions = env.action_space.shape[0]
+    env = gym.make(args.env)
+    state_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.shape[0]
+    max_action = int(env.action_space.high[0])
 
     # Random seed
     if args.seed > 0:
@@ -248,15 +258,13 @@ if __name__ == "__main__":
     memory = Memory(args.mem_size)
 
     # DDPG agent
-    agent = DDPG(nb_states, nb_actions, memory, args)
+    a_noise = OrnsteinUhlenbeckProcess(
+        action_dim, mu=args.ou_mu, theta=args.ou_theta, sigma=args.ou_sigma)
+    agent = DDPG(state_dim, action_dim, max_action, memory, args)
 
     # EA process
-    ea = GAv2(agent.get_actor_size(), pop_size=args.pop_size, mut_amp=args.mut_amp, mut_rate=args.mut_rate,
-              elite_frac=args.elite_frac, generator=lambda: Actor(nb_states, nb_actions).get_params())
-
-    # Trying ES type algorithms, but without much success
-    # ea = OpenES(agent.get_actor_size(), pop_size=args.pop_size, mut_amp=args.mut_amp,
-    #           generator=lambda: Actor(nb_states, nb_actions).get_params())
+    ea = GA(agent.actor.get_size(), pop_size=args.pop_size, mut_amp=args.mut_amp, mut_rate=args.mut_rate,
+            elite_frac=args.elite_frac, generator=lambda: Actor(state_dim, action_dim, max_action).get_params())
 
     if args.mode == 'train':
         train(n_gen=args.n_gen, n_episodes=args.n_episodes, omega=args.omega,
