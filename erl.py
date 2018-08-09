@@ -122,7 +122,7 @@ def train_rl(n_episodes=1, n_steps=1000, debug=False, render=False, random=False
         prCyan('noisy RL agent fitness:{}'.format(f))
 
     # training ddpg agent
-    agent.train(n_steps + steps)
+    agent.train(1)
 
     # evaluate ddpg agent
     f, _ = evaluate(agent.actor, n_episodes=n_episodes,
