@@ -54,7 +54,7 @@ class GA:
         """
         return self.fitness[self.order[-1]]
 
-    def add_ind(self, parameters, fitness):
+    def add(self, parameters, fitness):
         """
         Replaces the parameters of the worst individual
         """
@@ -100,7 +100,7 @@ class GA:
 
         return deepcopy(self.individuals)
 
-    def tell(self, scores):
+    def tell(self, scores, solutions):
         """
         Updates the population
         """

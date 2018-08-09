@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 
 from GA import GA
+from ES import VES, GES
 from models import ActorERL as Actor
 from ddpg import DDPG
 from td3 import TD3
@@ -21,7 +22,7 @@ else:
     FloatTensor = torch.FloatTensor
 
 
-def evaluate(actor, n_episodes=1, random=False, train=False, noise=None, render=False, add_memory=True):
+def evaluate(actor, n_episodes=1, random=False, noise=None, render=False, add_memory=True):
     """
     Computes the score of an actor on a given number of runs
     """
@@ -71,16 +72,12 @@ def evaluate(actor, n_episodes=1, random=False, train=False, noise=None, render=
             if done:
                 env.reset()
 
-        # training agent
-        if train:
-            agent.train(steps)
-
         scores.append(score)
 
     return np.mean(scores), steps
 
 
-def train_ea(n_episodes=1, debug=False, render=False):
+def train_ea(n_episodes=1, debug=False, render=False, random=False):
     """
     Train the EA process
     """
@@ -97,7 +94,7 @@ def train_ea(n_episodes=1, debug=False, render=False):
 
         actor.set_params(actor_params)
         f, steps = evaluate(actor, n_episodes=n_episodes,
-                            render=render, train=True)
+                            render=render, random=random)
         batch_steps += steps
         fitness.append(f)
 
@@ -106,23 +103,26 @@ def train_ea(n_episodes=1, debug=False, render=False):
             prLightPurple('EA actor fitness:{}'.format(f))
 
     # update ea
-    ea.tell(fitness)
+    ea.tell(fitness, actors_params)
 
     return batch_steps
 
 
-def train_rl(n_episodes=1, debug=False, render=False, random=False):
+def train_rl(n_episodes=1, n_steps=1000, debug=False, render=False, random=False):
     """
     Train the deep RL agent
     """
 
     # noisy ddpg agent
     f, steps = evaluate(agent.actor, n_episodes=n_episodes,
-                        noise=a_noise, render=render, random=random, train=True)
+                        noise=a_noise, render=render, random=random)
 
     # print score
     if debug:
         prCyan('noisy RL agent fitness:{}'.format(f))
+
+    # training ddpg agent
+    agent.train(n_steps + steps)
 
     # evaluate ddpg agent
     f, _ = evaluate(agent.actor, n_episodes=n_episodes,
@@ -147,9 +147,9 @@ def train(n_gen, n_episodes, omega, output=None, debug=False, render=False):
 
         random = total_steps < args.start_steps
         steps_ea = train_ea(n_episodes=n_episodes,
-                            debug=debug, render=render)
-        steps_rl, f = train_rl(n_episodes=n_episodes, debug=debug,
-                               render=render, random=random)
+                            debug=debug, render=render, random=random)
+        steps_rl, f = train_rl(
+            n_episodes=n_episodes, n_steps=steps_ea, debug=debug, render=render, random=random)
         total_steps += steps_rl + steps_ea
 
         # saving model and scores
@@ -166,10 +166,10 @@ def train(n_gen, n_episodes, omega, output=None, debug=False, render=False):
             prPurple('Generation#{}: Total steps:{}\n'.format(n, total_steps))
 
         # adding agent to population
-        if (n + 1) % omega == 0 and args.pop_size > 0:
+        if (n + 1) % omega == 0 and args.pop_size > 0 and args.omega > 0:
             if debug:
                 prRed('Transfered RL agent into pop')
-            ea.add_ind(agent.actor.get_params(), f)
+            ea.add(agent.actor.get_params(), f)
 
 
 def test(n_test, filename, debug=False, render=False):
@@ -211,6 +211,7 @@ if __name__ == "__main__":
     parser.add_argument('--layer_norm', dest='layer_norm', action='store_true')
 
     # TD3 parameters
+    parser.add_argument('--use_td3', dest='use_td3', action='store_true')
     parser.add_argument('--policy_noise', default=0.2, type=float)
     parser.add_argument('--noise_clip', default=0.5, type=float)
     parser.add_argument('--policy_freq', default=2, type=int)
@@ -220,6 +221,13 @@ if __name__ == "__main__":
     parser.add_argument('--elite_frac', default=0.1, type=float)
     parser.add_argument('--mut_rate', default=0.9, type=float)
     parser.add_argument('--mut_amp', default=0.1, type=float)
+
+    # ES parameters
+    parser.add_argument('--es_sigma', default=0.1, type=float)
+    parser.add_argument('--es_lr', default=1e-3, type=float)
+    parser.add_argument('--es_alpha', default=0.5, type=float)
+    parser.add_argument('--es_beta', default=2, type=float)
+    parser.add_argument('--es_k', default=1, type=int)
 
     # Gaussian noise parameters
     parser.add_argument('--gauss_sigma', default=0.1, type=float)
@@ -270,11 +278,18 @@ if __name__ == "__main__":
     # DDPG agent
     a_noise = OrnsteinUhlenbeckProcess(
         action_dim, mu=args.ou_mu, theta=args.ou_theta, sigma=args.ou_sigma)
-    agent = TD3(state_dim, action_dim, max_action, memory, args)
+    if args.use_td3:
+        agent = TD3(state_dim, action_dim, max_action, memory, args)
+    else:
+        agent = DDPG(state_dim, action_dim, max_action, memory, args)
 
     # EA process
-    ea = GA(agent.actor.get_size(), pop_size=args.pop_size, mut_amp=args.mut_amp, mut_rate=args.mut_rate,
-            elite_frac=args.elite_frac, generator=lambda: Actor(state_dim, action_dim, max_action).get_params())
+    # ea = GA(agent.actor.get_size(), pop_size=args.pop_size, mut_amp=args.mut_amp, mut_rate=args.mut_rate,
+    #         elite_frac=args.elite_frac, generator=lambda: Actor(state_dim, action_dim, max_action).get_params())
+
+    # ES process
+    ea = GES(agent.actor.get_size(), mu_init=agent.actor.get_params(), sigma_init=args.es_sigma,
+             pop_size=args.pop_size, lr=args.es_lr, alpha=args.es_alpha, beta=args.es_beta, k=args.es_k)
 
     if args.mode == 'train':
         train(n_gen=args.n_gen, n_episodes=args.n_episodes, omega=args.omega,
