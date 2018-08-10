@@ -1,6 +1,6 @@
 import numpy as np
 
-from Optimizers import Adam
+from Optimizers import Adam, BasicSGD
 
 
 def compute_ranks(x):
@@ -191,19 +191,20 @@ class GES:
             reward += l2_decay
 
         epsilon = (solutions - self.mu) / self.sigma
-        grad = -1/(self.sigma * self.pop_size) * np.dot(reward, epsilon)
+        grad = -self.beta/(self.sigma * self.pop_size) * \
+            np.dot(reward, epsilon)
 
         # optimization step
         step = self.optimizer.step(grad)
         self.mu += step
 
-    def add(self, grad, fitness):
+    def add(self, params, grads, fitness):
         """
         Adds new "gradient" to U
         """
-        grad = grad - self.mu
-        grad = grad / np.linalg.norm(grad)
-        self.U[:, -1] = grad
+        self.mu = params
+        grads = grads / np.linalg.norm(grads)
+        self.U[:, -1] = grads
 
     def get_distrib_params(self):
         """

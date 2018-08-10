@@ -29,8 +29,7 @@ class ActorERL(nn.Module):
         super(ActorERL, self).__init__()
 
         self.l1 = nn.Linear(state_dim, 128)
-        self.n1 = LayerNorm(128)
-        self.nn1 = nn.LayerNorm(128)
+        self.n1 = nn.LayerNorm(128)
 
         self.l2 = nn.Linear(128, 128)
         self.n2 = LayerNorm(128)
@@ -72,6 +71,12 @@ class ActorERL(nn.Module):
         """
         return deepcopy(np.hstack([to_numpy(v).flatten() for v in
                                    self.parameters()]))
+
+    def get_grads(self):
+        """
+        Returns the current gradient
+        """
+        return deepcopy(np.hstack([to_numpy(v.grad).flatten() for v in self.parameters()]))
 
     def get_size(self):
         """

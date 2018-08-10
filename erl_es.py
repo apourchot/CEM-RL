@@ -122,7 +122,7 @@ def train_rl(n_episodes=1, n_steps=1000, debug=False, render=False, random=False
         prCyan('noisy RL agent fitness:{}'.format(f))
 
     # training ddpg agent
-    agent.train(1)
+    agent.train(10)  # steps + n_steps)
 
     # evaluate ddpg agent
     f, _ = evaluate(agent.actor, n_episodes=n_episodes,
@@ -169,7 +169,7 @@ def train(n_gen, n_episodes, omega, output=None, debug=False, render=False):
         if (n + 1) % omega == 0 and args.pop_size > 0 and args.omega > 0:
             if debug:
                 prRed('Transfered RL agent into pop')
-            ea.add(agent.actor.get_params(), f)
+            ea.add(agent.actor.get_params(), agent.actor.get_grads(), f)
 
 
 def test(n_test, filename, debug=False, render=False):
@@ -282,10 +282,6 @@ if __name__ == "__main__":
         agent = TD3(state_dim, action_dim, max_action, memory, args)
     else:
         agent = DDPG(state_dim, action_dim, max_action, memory, args)
-
-    # EA process
-    # ea = GA(agent.actor.get_size(), pop_size=args.pop_size, mut_amp=args.mut_amp, mut_rate=args.mut_rate,
-    #         elite_frac=args.elite_frac, generator=lambda: Actor(state_dim, action_dim, max_action).get_params())
 
     # ES process
     ea = GES(agent.actor.get_size(), mu_init=agent.actor.get_params(), sigma_init=args.es_sigma,
