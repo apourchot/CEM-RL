@@ -236,6 +236,7 @@ if __name__ == "__main__":
     parser.add_argument('--gauss_sigma', default=0.1, type=float)
 
     # Action noise OU process parameters
+    parser.add_argument('--ou_noise', dest='ou_noise', action='store_true')
     parser.add_argument('--ou_theta', default=0.15, type=float)
     parser.add_argument('--ou_sigma', default=0.2, type=float)
     parser.add_argument('--ou_mu', default=0.0, type=float)
@@ -264,6 +265,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
     args.output = get_output_folder(args.output, args.env)
 
+    with open(args.output + "/parameters.txt", 'w') as file:
+        for key, value in vars(args).items():
+            file.write("{} = {}\n".format(key, value))
+
     # The environment
     env = gym.make(args.env)
     state_dim = env.observation_space.shape[0]
@@ -279,8 +284,11 @@ if __name__ == "__main__":
     memory = Memory(args.mem_size)
 
     # DDPG agent
-    a_noise = OrnsteinUhlenbeckProcess(
-        action_dim, mu=args.ou_mu, theta=args.ou_theta, sigma=args.ou_sigma)
+    if args.ou_noise:
+        a_noise = OrnsteinUhlenbeckProcess(
+            action_dim, mu=args.ou_mu, theta=args.ou_theta, sigma=args.ou_sigma)
+    else:
+        a_noise = GaussianNoise(action_dim, sigma=args.gauss_sigma)
     if args.use_td3:
         agent = TD3(state_dim, action_dim, max_action, memory, args)
     else:
