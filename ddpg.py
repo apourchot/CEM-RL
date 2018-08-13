@@ -53,6 +53,9 @@ class DDPG(object):
         self.discount = args.discount
         self.batch_size = args.batch_size
 
+    def show_lr(self):
+        print(self.actor_optimizer.state_dict())
+
     def select_action(self, state, noise=None):
         state = FloatTensor(
             state.reshape(-1, self.state_dim))
@@ -106,6 +109,40 @@ class DDPG(object):
                     self.tau * param.data + (1 - self.tau) * target_param.data)
 
             for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
+                target_param.data.copy_(
+                    self.tau * param.data + (1 - self.tau) * target_param.data)
+
+    def train_critic(self, iterations):
+
+        for _ in tqdm(range(iterations)):
+
+            # Sample replay buffer
+            x, y, u, r, d = self.memory.sample(self.batch_size)
+            state = FloatTensor(x)
+            action = FloatTensor(u)
+            next_state = FloatTensor(y)
+            done = FloatTensor(1 - d)
+            reward = FloatTensor(r)
+
+            # Q target = reward + discount * Q(next_state, pi(next_state))
+            with torch.no_grad():
+                target_Q = self.critic_target(
+                    next_state, self.actor_target(next_state))
+                target_Q = reward + (done * self.discount * target_Q)
+
+            # Get current Q estimate
+            current_Q = self.critic(state, action)
+
+            # Compute critic loss
+            critic_loss = self.criterion(current_Q, target_Q)
+
+            # Optimize the critic
+            self.critic_optimizer.zero_grad()
+            critic_loss.backward()
+            self.critic_optimizer.step()
+
+            # Update the frozen target models
+            for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
                 target_param.data.copy_(
                     self.tau * param.data + (1 - self.tau) * target_param.data)
 

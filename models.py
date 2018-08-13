@@ -148,10 +148,10 @@ class CriticERL(RLNN):
         return x
 
 
-class Actor(RLNN):
+class ActorTD3(RLNN):
 
-    def __init__(self, state_dim, action_dim, max_action, layer_norm=False):
-        super(Actor, self).__init__(state_dim, action_dim, max_action)
+    def __init__(self, state_dim, action_dim, max_action, layer_norm=False, init=True):
+        super(ActorTD3, self).__init__(state_dim, action_dim, max_action)
 
         self.l1 = nn.Linear(state_dim, 400)
         if layer_norm:
@@ -160,6 +160,8 @@ class Actor(RLNN):
         if layer_norm:
             self.n2 = nn.LayerNorm(300)
         self.l3 = nn.Linear(300, action_dim)
+
+        self.layer_norm = layer_norm
 
     def forward(self, x):
 
@@ -206,7 +208,7 @@ class Critic(RLNN):
 
 
 class CriticTD3(RLNN):
-    def __init__(self, state_dim, action_dim, layer_norm):
+    def __init__(self, state_dim, action_dim, layer_norm=False):
         super(CriticTD3, self).__init__(state_dim, action_dim, 1)
 
         # Q1 architecture

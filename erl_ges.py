@@ -124,7 +124,7 @@ def train_rl(n_episodes=1, n_steps=1000, debug=False, render=False, random=False
         prCyan('noisy RL agent fitness:{}'.format(f))
 
     # training ddpg agent
-    agent.train(steps + n_steps // 5)
+    agent.train(10)  # steps + n_steps // 5)
 
     # evaluate ddpg agent
     f, _ = evaluate(agent.actor, n_episodes=n_episodes,
@@ -171,6 +171,7 @@ def train(n_gen, n_episodes, omega, output=None, debug=False, render=False):
         if (n + 1) % omega == 0 and args.pop_size > 0 and args.omega > 0:
             if debug:
                 prRed('Transfered RL agent into pop')
+            agent.show_lr()
             es.add(agent.actor.get_params(), agent.actor.get_grads(), f)
 
 
@@ -183,7 +184,7 @@ def test(n_test, filename, debug=False, render=False):
     actor = Actor(state_dim, action_dim, max_action)
     if USE_CUDA:
         actor.cuda()
-    actor.load_model(filename)
+    actor.load_model(filename, "actor")
 
     # evaluate
     f, _ = evaluate(actor, n_episodes=n_test,

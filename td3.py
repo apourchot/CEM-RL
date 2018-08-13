@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 
-from models import ActorERL as Actor, CriticTD3ERL as CriticTD3
+from models import ActorTD3 as Actor, CriticTD3
 
 # https://github.com/sfujim/TD3/edit/master/TD3.py
 # Implementation of Twin Delayed Deep Deterministic Policy Gradients (TD3)
@@ -124,9 +124,9 @@ class TD3(object):
                         self.tau * param.data + (1 - self.tau) * target_param.data)
 
     def load(self, filename):
-        self.actor.load_model(filename)
-        self.critic.load_model(filename)
+        self.actor.load_model(filename, "actor")
+        self.critic.load_model(filename, "critic")
 
     def save(self, output):
-        self.actor.save_model(output)
-        self.critic.save_model(output)
+        self.actor.save_model(output, "actor")
+        self.critic.save_model(output, "critic")

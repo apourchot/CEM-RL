@@ -202,7 +202,8 @@ class GES:
         """
         Adds new "gradient" to U
         """
-        self.mu = params
+        if params is not None:
+            self.mu = params
         grads = grads / np.linalg.norm(grads)
         self.U[:, -1] = grads
 
