@@ -77,16 +77,16 @@ def evaluate(actor, n_episodes=1, random=False, noise=None, render=False, add_me
     return np.mean(scores), steps
 
 
-def train_ea(n_episodes=1, debug=False, render=False, random=False):
+def train_es(n_episodes=1, debug=False, render=False, random=False):
     """
-    Train the EA process
+    Train the Evolution Strategy and set as agent the best performing actor
     """
 
     batch_steps = 0
     actor = Actor(state_dim, action_dim, max_action)
     if USE_CUDA:
         actor.cuda()
-    actors_params = ea.ask()
+    actors_params = es.ask()
     fitness = []
 
     # evaluate all actors
@@ -102,8 +102,10 @@ def train_ea(n_episodes=1, debug=False, render=False, random=False):
         if debug:
             prLightPurple('EA actor fitness:{}'.format(f))
 
-    # update ea
-    ea.tell(fitness, actors_params)
+    # update es and agent
+    es.tell(fitness, actors_params)
+    arg = np.argmax(fitness)
+    agent.actor.set_params(actors_params[arg])
 
     return batch_steps
 
@@ -122,7 +124,7 @@ def train_rl(n_episodes=1, n_steps=1000, debug=False, render=False, random=False
         prCyan('noisy RL agent fitness:{}'.format(f))
 
     # training ddpg agent
-    agent.train(10)  # steps + n_steps)
+    agent.train(steps + n_steps // 5)
 
     # evaluate ddpg agent
     f, _ = evaluate(agent.actor, n_episodes=n_episodes,
@@ -146,7 +148,7 @@ def train(n_gen, n_episodes, omega, output=None, debug=False, render=False):
     for n in range(n_gen):
 
         random = total_steps < args.start_steps
-        steps_ea = train_ea(n_episodes=n_episodes,
+        steps_ea = train_es(n_episodes=n_episodes,
                             debug=debug, render=render, random=random)
         steps_rl, f = train_rl(
             n_episodes=n_episodes, n_steps=steps_ea, debug=debug, render=render, random=random)
@@ -169,7 +171,7 @@ def train(n_gen, n_episodes, omega, output=None, debug=False, render=False):
         if (n + 1) % omega == 0 and args.pop_size > 0 and args.omega > 0:
             if debug:
                 prRed('Transfered RL agent into pop')
-            ea.add(agent.actor.get_params(), agent.actor.get_grads(), f)
+            es.add(agent.actor.get_params(), agent.actor.get_grads(), f)
 
 
 def test(n_test, filename, debug=False, render=False):
@@ -284,7 +286,7 @@ if __name__ == "__main__":
         agent = DDPG(state_dim, action_dim, max_action, memory, args)
 
     # ES process
-    ea = GES(agent.actor.get_size(), mu_init=agent.actor.get_params(), sigma_init=args.es_sigma,
+    es = GES(agent.actor.get_size(), mu_init=agent.actor.get_params(), sigma_init=args.es_sigma,
              pop_size=args.pop_size, lr=args.es_lr, alpha=args.es_alpha, beta=args.es_beta, k=args.es_k)
 
     if args.mode == 'train':

@@ -8,7 +8,7 @@ import pandas as pd
 
 from GA import GA
 from ES import VES, GES
-from models import ActorERL as Actor
+from models import ActorERL as Actor, Actor as Actor2
 from ddpg import DDPG
 from td3 import TD3
 from random_process import *
@@ -122,7 +122,7 @@ def train_rl(n_episodes=1, n_steps=1000, debug=False, render=False, random=False
         prCyan('noisy RL agent fitness:{}'.format(f))
 
     # training ddpg agent
-    agent.train(steps + n_steps)
+    agent.train(10)  # steps + n_steps)
 
     # evaluate ddpg agent
     f, _ = evaluate(agent.actor, n_episodes=n_episodes,
@@ -178,19 +178,22 @@ def test(n_test, filename, debug=False, render=False):
     """
 
     # load weights
-    actor = Actor(state_dim, action_dim, max_action)
+    actor = Actor2(state_dim, action_dim, max_action)
     if USE_CUDA:
         actor.cuda()
     actor.load_model(filename)
 
     # evaluate
-    f, _ = evaluate(actor, n_episodes=n_test,
-                    noise=False, render=render)
+    fs = []
+    for n in range(n_test):
+        f, _ = evaluate(actor, n_episodes=1,
+                        noise=None, render=render)
+        fs.append(f)
 
     # print scores
     if debug:
         prLightPurple(
-            'Average fitness:{}'.format(f))
+            'Average fitness:{}, std:{}'.format(np.mean(fs), np.std(fs)))
 
 
 if __name__ == "__main__":

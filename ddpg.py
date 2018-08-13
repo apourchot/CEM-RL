@@ -110,9 +110,9 @@ class DDPG(object):
                     self.tau * param.data + (1 - self.tau) * target_param.data)
 
     def load(self, filename):
-        self.actor.load_model(filename)
-        self.critic.load_model(filename)
+        self.actor.load_model(filename, "actor")
+        self.critic.load_model(filename, "critic")
 
     def save(self, output):
-        self.actor.save_model(output)
-        self.critic.save_model(output)
+        self.actor.save_model(output, "actor")
+        self.critic.save_model(output, "critic")
