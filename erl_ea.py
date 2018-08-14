@@ -8,7 +8,7 @@ import pandas as pd
 
 from GA import GA
 from ES import VES, GES
-from models import ActorERL as Actor, ActorTD3 as Actor2
+from models import Actor
 from ddpg import DDPG
 from td3 import TD3
 from random_process import *
@@ -83,7 +83,7 @@ def train_ea(n_episodes=1, debug=False, render=False, random=False):
     """
 
     batch_steps = 0
-    actor = Actor(state_dim, action_dim, max_action)
+    actor = Actor(state_dim, action_dim, max_action, args.layer_norm)
     if USE_CUDA:
         actor.cuda()
     actors_params = ea.ask()
@@ -178,10 +178,10 @@ def test(n_test, filename, debug=False, render=False):
     """
 
     # load weights
-    actor = Actor2(state_dim, action_dim, max_action)
+    actor = Actor(state_dim, action_dim, max_action, args.layer_norm)
     if USE_CUDA:
         actor.cuda()
-    actor.load_model(filename)
+    actor.load_model(filename, "actor")
 
     # evaluate
     fs = []
@@ -296,7 +296,7 @@ if __name__ == "__main__":
 
     # EA process
     ea = GA(agent.actor.get_size(), pop_size=args.pop_size, mut_amp=args.mut_amp, mut_rate=args.mut_rate,
-            elite_frac=args.elite_frac, generator=lambda: Actor(state_dim, action_dim, max_action).get_params())
+            elite_frac=args.elite_frac, generator=lambda: Actor(state_dim, action_dim, max_action, args.layer_norm).get_params())
 
     if args.mode == 'train':
         train(n_gen=args.n_gen, n_episodes=args.n_episodes, omega=args.omega,

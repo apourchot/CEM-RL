@@ -3,8 +3,7 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 
-from models import ActorERL as Actor
-from models import CriticERL as Critic
+from models import Actor, Critic
 
 # https://github.com/sfujim/TD3/edit/master/OurDDPG.py
 # Re-tuned version of Deep Deterministic Policy Gradients (DDPG)
@@ -20,16 +19,18 @@ class DDPG(object):
     def __init__(self, state_dim, action_dim, max_action, memory, args):
 
         # actor
-        self.actor = Actor(state_dim, action_dim, max_action, init=True)
+        self.actor = Actor(state_dim, action_dim, max_action,
+                           layer_norm=args.layer_norm)
         self.actor_target = Actor(
-            state_dim, action_dim, max_action, init=True)
+            state_dim, action_dim, max_action, layer_norm=args.layer_norm)
         self.actor_target.load_state_dict(self.actor.state_dict())
         self.actor_optimizer = torch.optim.Adam(
             self.actor.parameters(), lr=args.actor_lr)
 
         # crtic
-        self.critic = Critic(state_dim, action_dim)
-        self.critic_target = Critic(state_dim, action_dim)
+        self.critic = Critic(state_dim, action_dim, layer_norm=args.layer_norm)
+        self.critic_target = Critic(
+            state_dim, action_dim, layer_norm=args.layer_norm)
         self.critic_target.load_state_dict(self.critic.state_dict())
         self.critic_optimizer = torch.optim.Adam(
             self.critic.parameters(), lr=args.critic_lr)

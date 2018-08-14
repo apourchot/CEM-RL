@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 
-from models import ActorTD3 as Actor, CriticTD3
+from models import Actor, CriticTD3
 
 # https://github.com/sfujim/TD3/edit/master/TD3.py
 # Implementation of Twin Delayed Deep Deterministic Policy Gradients (TD3)
