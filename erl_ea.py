@@ -56,12 +56,14 @@ def evaluate(actor, n_episodes=1, random=False, noise=None, render=False, add_me
             # get next action and act
             action = policy(obs)
             n_obs, reward, done, info = env.step(action)
+            done_bool = 0 if steps + \
+                1 == env._max_episode_steps else float(done)
             score += reward
             steps += 1
 
             # adding in memory
             if add_memory:
-                memory.add((obs, n_obs, action, reward, done))
+                memory.add((obs, n_obs, action, reward, done_bool))
             obs = n_obs
 
             # render if needed
@@ -205,9 +207,9 @@ if __name__ == "__main__":
     parser.add_argument('--start_steps', default=10000, type=int)
 
     # DDPG parameters
-    parser.add_argument('--actor_lr', default=0.00005, type=float)
-    parser.add_argument('--critic_lr', default=0.0005, type=float)
-    parser.add_argument('--batch_size', default=128, type=int)
+    parser.add_argument('--actor_lr', default=0.001, type=float)
+    parser.add_argument('--critic_lr', default=0.001, type=float)
+    parser.add_argument('--batch_size', default=100, type=int)
     parser.add_argument('--discount', default=0.99, type=float)
     parser.add_argument('--reward_scale', default=1., type=float)
     parser.add_argument('--tau', default=0.005, type=float)
@@ -279,6 +281,7 @@ if __name__ == "__main__":
     if args.seed > 0:
         np.random.seed(args.seed)
         env.seed(args.seed)
+        torch.manual_seed(args.seed)
 
     # replay buffer
     memory = Memory(args.mem_size)

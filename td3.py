@@ -74,10 +74,10 @@ class TD3(object):
             # Sample replay buffer
             x, y, u, r, d = self.memory.sample(self.batch_size)
             state = FloatTensor(x)
-            action = FloatTensor(u)
             next_state = FloatTensor(y)
-            done = FloatTensor(1 - d)
+            action = FloatTensor(u)
             reward = FloatTensor(r)
+            done = FloatTensor(1 - d)
 
             # Select action according to policy and add clipped noise
             noise = np.clip(np.random.normal(0, self.policy_noise, size=(
