@@ -23,14 +23,11 @@ class Memory():
         self.pos = mp.Value('l', 0)
         self.full = mp.Value('b', False)
 
-        self.states = FloatTensor(torch.zeros(
-            self.memory_size, self.state_dim))
-        self.actions = FloatTensor(torch.zeros(
-            self.memory_size, self.action_dim))
-        self.n_states = FloatTensor(
-            torch.zeros(self.memory_size, self.state_dim))
-        self.rewards = FloatTensor(torch.zeros(self.memory_size, 1))
-        self.dones = FloatTensor(torch.zeros(self.memory_size, 1))
+        self.states = torch.zeros(self.memory_size, self.state_dim)
+        self.actions = torch.zeros(self.memory_size, self.action_dim)
+        self.n_states = torch.zeros(self.memory_size, self.state_dim)
+        self.rewards = torch.zeros(self.memory_size, 1)
+        self.dones = torch.zeros(self.memory_size, 1)
 
     def size(self):
         if self.full.value:

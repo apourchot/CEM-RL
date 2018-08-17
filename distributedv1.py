@@ -81,15 +81,16 @@ def evaluate(actor, env, memory=None, n_episodes=1, random=False, noise=None, re
     return np.mean(scores), steps
 
 
-def train(n_gen, n_episodes, output=None, debug=False, render=False):
+def train(n_episodes, output=None, debug=False, render=False):
     """
     Train the whole process
     """
 
     total_steps = 0
+    n = 0
     df = pd.DataFrame(columns=["total_steps", "best_score"])
 
-    for n in range(n_gen):
+    while total_steps < args.max_steps:
 
         random = total_steps < args.start_steps
 
@@ -121,6 +122,7 @@ def train(n_gen, n_episodes, output=None, debug=False, render=False):
         best_score = np.max(fs)
         df = df.append({"total_steps": total_steps,
                         "best_score": best_score}, ignore_index=True)
+        n += 1
 
         # printing iteration resume
         if debug:
@@ -166,9 +168,9 @@ if __name__ == "__main__":
     parser.add_argument('--param_adapt', default=1.01, type=float)
 
     # Training parameters
-    parser.add_argument('--n_gen', default=100, type=int)
     parser.add_argument('--n_actor', default=1, type=int)
     parser.add_argument('--n_episodes', default=1, type=int)
+    parser.add_argument('--max_steps', default=1000000, type=int)
     parser.add_argument('--mem_size', default=1000000, type=int)
 
     # Testing parameters
@@ -218,7 +220,7 @@ if __name__ == "__main__":
         agent = D3PG(state_dim, action_dim, max_action, memory, args)
 
     if args.mode == 'train':
-        train(n_gen=args.n_gen, n_episodes=args.n_episodes,
+        train(n_episodes=args.n_episodes,
               output=args.output, debug=args.debug, render=args.render)
 
     else:
