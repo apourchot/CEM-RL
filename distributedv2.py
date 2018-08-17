@@ -343,6 +343,13 @@ if __name__ == "__main__":
     actor_t = Actor(state_dim, action_dim, max_action, args)
     actor_t.load_state_dict(actor.state_dict())
 
+    if USE_CUDA:
+        critic.cuda()
+        critic_t.cuda()
+        actor.cuda()
+        actor_t.cuda()
+        memory.cuda()
+
     res_queue = mp.Queue()
     total_steps = mp.Value('i', 0)
 

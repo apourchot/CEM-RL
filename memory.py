@@ -68,6 +68,13 @@ class SharedMemory():
             return self.memory_size
         return self.pos.value
 
+    def cuda(self):
+        self.states.cuda()
+        self.actions.cuda()
+        self.n_states.cuda()
+        self.rewards.cuda()
+        self.dones.cuda()
+
     # Expects tuples of (state, next_state, action, reward, done)
     def _add(self, datum):
 
