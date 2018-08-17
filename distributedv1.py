@@ -13,7 +13,7 @@ import logging
 from GA import GA
 from models import Actor
 from ddpg import DDPG, D3PG
-from td3 import TD3
+from td3 import TD3, DTD3
 from random_process import *
 from util import *
 from memory import Memory, SharedMemory
@@ -215,7 +215,7 @@ if __name__ == "__main__":
         a_noise = GaussianNoise(action_dim, sigma=args.gauss_sigma)
 
     if args.use_td3:
-        agent = TD3(state_dim, action_dim, max_action, memory, args)
+        agent = DTD3(state_dim, action_dim, max_action, memory, args)
     else:
         agent = D3PG(state_dim, action_dim, max_action, memory, args)
 

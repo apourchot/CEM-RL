@@ -227,8 +227,6 @@ class D3PG(object):
             states, n_states, actions, rewards, dones = self.memory.sample(
                 self.batch_size)
 
-            sys.stdout.flush()
-
             # Q target = reward + discount * Q(next_state, pi(next_state))
             with torch.no_grad():
                 target_Q = self.critic_target(
