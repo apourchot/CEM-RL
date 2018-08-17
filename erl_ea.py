@@ -284,7 +284,7 @@ if __name__ == "__main__":
         torch.manual_seed(args.seed)
 
     # replay buffer
-    memory = Memory(args.mem_size)
+    memory = Memory(args.mem_size, state_dim, action_dim)
 
     # DDPG agent
     if args.ou_noise:

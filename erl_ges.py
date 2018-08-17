@@ -276,7 +276,7 @@ if __name__ == "__main__":
         env.seed(args.seed)
 
     # replay buffer
-    memory = Memory(args.mem_size)
+    memory = Memory(args.mem_size, state_dim, action_dim)
 
     # DDPG agent
     a_noise = OrnsteinUhlenbeckProcess(

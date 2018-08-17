@@ -120,21 +120,19 @@ class DDPG(object):
         for _ in tqdm(range(iterations)):
 
             # Sample replay buffer
-            x, y, u, r, d = self.memory.sample(self.batch_size)
-            state = FloatTensor(x)
-            action = FloatTensor(u)
-            next_state = FloatTensor(y)
-            done = FloatTensor(1 - d)
-            reward = FloatTensor(r)
+            states, n_states, actions, rewards, dones = self.memory.sample(
+                self.batch_size)
+
+            sys.stdout.flush()
 
             # Q target = reward + discount * Q(next_state, pi(next_state))
             with torch.no_grad():
                 target_Q = self.critic_target(
-                    next_state, self.actor_target(next_state))
-                target_Q = reward + (done * self.discount * target_Q)
+                    n_states, self.actor_target(n_states))
+                target_Q = rewards + (1 - dones) * self.discount * target_Q
 
             # Get current Q estimate
-            current_Q = self.critic(state, action)
+            current_Q = self.critic(states, actions)
 
             # Compute critic loss
             critic_loss = self.criterion(current_Q, target_Q)
@@ -144,8 +142,21 @@ class DDPG(object):
             critic_loss.backward()
             self.critic_optimizer.step()
 
+            # Compute actor loss
+            actor_loss = - \
+                self.critic(states, self.actor(states)).mean()
+
+            # Optimize the actor
+            self.actor_optimizer.zero_grad()
+            actor_loss.backward()
+            self.actor_optimizer.step()
+
             # Update the frozen target models
             for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
+                target_param.data.copy_(
+                    self.tau * param.data + (1 - self.tau) * target_param.data)
+
+            for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
                 target_param.data.copy_(
                     self.tau * param.data + (1 - self.tau) * target_param.data)
 

@@ -14,34 +14,57 @@ else:
 
 class Memory():
 
-    def __init__(self, max_size):
+    def __init__(self, memory_size, state_dim, action_dim):
 
         # params
-        self.max_size = max_size
-        self.storage = [None] * max_size
-        self.position = 0
-        self.filled = 0
+        self.memory_size = memory_size
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.pos = mp.Value('l', 0)
+        self.full = mp.Value('b', False)
+
+        self.states = FloatTensor(torch.zeros(
+            self.memory_size, self.state_dim))
+        self.actions = FloatTensor(torch.zeros(
+            self.memory_size, self.action_dim))
+        self.n_states = FloatTensor(
+            torch.zeros(self.memory_size, self.state_dim))
+        self.rewards = FloatTensor(torch.zeros(self.memory_size, 1))
+        self.dones = FloatTensor(torch.zeros(self.memory_size, 1))
+
+    def size(self):
+        if self.full.value:
+            return self.memory_size
+        return self.pos.value
 
     # Expects tuples of (state, next_state, action, reward, done)
-    def add(self, data):
-        self.storage[self.position] = data
-        self.position = (self.position + 1) % self.max_size
-        self.filled = min(self.filled + 1, self.max_size)
 
-    def sample(self, batch_size=100):
-        ind = np.random.randint(
-            0, self.filled, size=min(batch_size, self.filled))
-        x, y, u, r, d = [], [], [], [], []
+    def add(self, datum):
 
-        for i in ind:
-            X, Y, U, R, D = self.storage[i]
-            x.append(np.array(X, copy=False))
-            y.append(np.array(Y, copy=False))
-            u.append(np.array(U, copy=False))
-            r.append(np.array(R, copy=False))
-            d.append(np.array(D, copy=False))
+        state, n_state, action, reward, done = datum
 
-        return np.array(x), np.array(y), np.array(u), np.array(r).reshape(-1, 1), np.array(d).reshape(-1, 1)
+        self.states[self.pos.value][:] = FloatTensor(state)
+        self.n_states[self.pos.value][:] = FloatTensor(n_state)
+        self.actions[self.pos.value][:] = FloatTensor(action)
+        self.rewards[self.pos.value][:] = FloatTensor([reward])
+        self.dones[self.pos.value][:] = FloatTensor([done])
+
+        self.pos.value += 1
+        if self.pos.value == self.memory_size:
+            self.full.value = True
+            self.pos.value = 0
+
+    def sample(self, batch_size):
+
+        upper_bound = self.memory_size if self.full.value else self.pos.value
+        batch_inds = torch.LongTensor(
+            np.random.randint(0, upper_bound, size=batch_size))
+
+        return (self.states[batch_inds],
+                self.n_states[batch_inds],
+                self.actions[batch_inds],
+                self.rewards[batch_inds],
+                self.dones[batch_inds])
 
 
 class SharedMemory():
@@ -55,11 +78,14 @@ class SharedMemory():
         self.pos = mp.Value('l', 0)
         self.full = mp.Value('b', False)
 
-        self.states = torch.zeros(self.memory_size, self.state_dim)
-        self.actions = torch.zeros(self.memory_size, self.action_dim)
-        self.n_states = torch.zeros(self.memory_size, self.state_dim)
-        self.rewards = torch.zeros(self.memory_size, 1)
-        self.dones = torch.zeros(self.memory_size, 1)
+        self.states = FloatTensor(torch.zeros(
+            self.memory_size, self.state_dim))
+        self.actions = FloatTensor(torch.zeros(
+            self.memory_size, self.action_dim))
+        self.n_states = FloatTensor(
+            torch.zeros(self.memory_size, self.state_dim))
+        self.rewards = FloatTensor(torch.zeros(self.memory_size, 1))
+        self.dones = FloatTensor(torch.zeros(self.memory_size, 1))
 
         self.states.share_memory_()
         self.actions.share_memory_()
