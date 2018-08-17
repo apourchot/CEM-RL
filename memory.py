@@ -2,6 +2,12 @@ import numpy as np
 import torch
 import torch.multiprocessing as mp
 
+USE_CUDA = torch.cuda.is_available()
+if USE_CUDA:
+    FloatTensor = torch.cuda.FloatTensor
+else:
+    FloatTensor = torch.FloatTensor
+
 # Code based on https://github.com/openai/baselines/blob/master/baselines/deepq/replay_buffer.py
 # and https://github.com/jingweiz/pytorch-distributed/blob/master/core/memories/shared_memory.py
 
@@ -68,23 +74,17 @@ class SharedMemory():
             return self.memory_size
         return self.pos.value
 
-    def cuda(self):
-        self.states.cuda()
-        self.actions.cuda()
-        self.n_states.cuda()
-        self.rewards.cuda()
-        self.dones.cuda()
-
     # Expects tuples of (state, next_state, action, reward, done)
+
     def _add(self, datum):
 
         state, n_state, action, reward, done = datum
 
-        self.states[self.pos.value][:] = torch.FloatTensor(state)
-        self.n_states[self.pos.value][:] = torch.FloatTensor(n_state)
-        self.actions[self.pos.value][:] = torch.FloatTensor(action)
-        self.rewards[self.pos.value][:] = torch.FloatTensor([reward])
-        self.dones[self.pos.value][:] = torch.FloatTensor([done])
+        self.states[self.pos.value][:] = FloatTensor(state)
+        self.n_states[self.pos.value][:] = FloatTensor(n_state)
+        self.actions[self.pos.value][:] = FloatTensor(action)
+        self.rewards[self.pos.value][:] = FloatTensor([reward])
+        self.dones[self.pos.value][:] = FloatTensor([done])
 
         self.pos.value += 1
         if self.pos.value == self.memory_size:
