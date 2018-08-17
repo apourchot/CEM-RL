@@ -38,7 +38,7 @@ class RLNN(nn.Module):
                     params[cpt:cpt + tmp]).view(param.size()))
             cpt += tmp
 
-    def actor_grad(self, critic, memory, batch_size):
+    def train_actor(self, critic, memory, batch_size):
         """
         Computes gradient of actor wrt given critic
         """
