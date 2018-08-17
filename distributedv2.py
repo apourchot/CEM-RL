@@ -102,8 +102,7 @@ def evaluate(actor, env, memory=None, n_episodes=1, random=False, noise=None, re
 
     if not random:
         def policy(state):
-            state = FloatTensor(
-                state.reshape(-1, state_dim))
+            state = FloatTensor(state.reshape(-1))
             action = actor(state).cpu().data.numpy().flatten()
 
             if noise is not None:
@@ -337,8 +336,6 @@ if __name__ == "__main__":
     critic = Critic(state_dim, action_dim, max_action, args)
     critic_t = Critic(state_dim, action_dim, max_action, args)
     critic_t.load_state_dict(critic.state_dict())
-    critic.share_memory()
-    critic_t.share_memory()
 
     actor = Actor(state_dim, action_dim, max_action, args)
     actor_t = Actor(state_dim, action_dim, max_action, args)
@@ -349,8 +346,9 @@ if __name__ == "__main__":
         critic_t.cuda()
         actor.cuda()
         actor_t.cuda()
-        memory.cuda()
 
+    critic.share_memory()
+    critic_t.share_memory()
     res_queue = mp.Queue()
     total_steps = mp.Value('i', 0)
 
