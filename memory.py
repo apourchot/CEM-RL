@@ -23,11 +23,21 @@ class Memory():
         self.pos = mp.Value('l', 0)
         self.full = mp.Value('b', False)
 
-        self.states = torch.zeros(self.memory_size, self.state_dim)
-        self.actions = torch.zeros(self.memory_size, self.action_dim)
-        self.n_states = torch.zeros(self.memory_size, self.state_dim)
-        self.rewards = torch.zeros(self.memory_size, 1)
-        self.dones = torch.zeros(self.memory_size, 1)
+        if USE_CUDA:
+            self.states = torch.zeros(self.memory_size, self.state_dim).cuda()
+            self.actions = torch.zeros(
+                self.memory_size, self.action_dim).cuda()
+            self.n_states = torch.zeros(
+                self.memory_size, self.state_dim).cuda()
+            self.rewards = torch.zeros(self.memory_size, 1).cuda()
+            self.dones = torch.zeros(self.memory_size, 1).cuda()
+
+        else:
+            self.states = torch.zeros(self.memory_size, self.state_dim)
+            self.actions = torch.zeros(self.memory_size, self.action_dim)
+            self.n_states = torch.zeros(self.memory_size, self.state_dim)
+            self.rewards = torch.zeros(self.memory_size, 1)
+            self.dones = torch.zeros(self.memory_size, 1)
 
     def size(self):
         if self.full.value:
