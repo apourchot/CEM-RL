@@ -287,6 +287,8 @@ if __name__ == "__main__":
 
     # training
     total_steps = 0
+    df = pd.DataFrame(columns=["total_steps", "average_score", "best_score"])
+
     while total_steps < args.max_steps:
 
         actors_params = es.ask()
@@ -308,12 +310,14 @@ if __name__ == "__main__":
 
         # evaluate all actors
         actor_steps = 0
+        fs = []
         for actor_params in actors_params:
 
             actor.set_params(actor_params)
             f, steps = evaluate(actor, env, memory=memory, n_episodes=args.n_episodes,
                                 render=args.render)
             actor_steps += steps
+            fs.append(f)
             fitness.append(-f)
 
             # print scores
@@ -325,6 +329,15 @@ if __name__ == "__main__":
 
         # update es and agent
         es.tell(actors_params, fitness, check_points=False)
+
+        # save stuff
+        df.to_pickle(args.output + "/log.pkl")
+
+        # saving scores
+        best_score = f
+        df = df.append({"total_steps": total_steps,
+                        "average_score": np.mean(fs),
+                        "best_score": np.max(fs)}, ignore_index=True)
 
         total_steps += actor_steps
         print("Total steps", total_steps)
