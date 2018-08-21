@@ -10,10 +10,8 @@ import pandas as pd
 import torch.multiprocessing as mp
 import logging
 
-from GA import GA
-from models import Actor
-from ddpg import DDPG, D3PG
-from td3 import TD3, DTD3
+from ddpg import D3PG
+from td3 import DTD3
 from random_process import *
 from util import *
 from memory import Memory, SharedMemory
@@ -88,7 +86,8 @@ def train(n_episodes, output=None, debug=False, render=False):
 
     total_steps = 0
     n = 0
-    df = pd.DataFrame(columns=["total_steps", "best_score"])
+    df = pd.DataFrame(columns=["total_steps", "average_score", "best_score"] +
+                      ["score_{}".format(i) for i in range(args.n_actor)])
 
     while total_steps < args.max_steps:
 
@@ -116,12 +115,17 @@ def train(n_episodes, output=None, debug=False, render=False):
             prRed('RL agent fitness:{}'.format(f))
 
         # saving models and scores
-        agent.save(args.output)
+        os.makedirs(args.output + "/{}_steps".format(total_steps),
+                    exist_ok=True)
+        agent.save(args.output + "/{}_steps".format(total_steps))
 
         # saving scores
-        best_score = np.max(fs)
-        df = df.append({"total_steps": total_steps,
-                        "best_score": best_score}, ignore_index=True)
+        res = {"total_steps": total_steps,
+               "average_score": np.mean(fs), "best_score": np.max(fs)}
+        for i in range(args.n_actor):
+            res["score_{}".format(i)] = fs[i]
+        df = df.append(res, ignore_index=True)
+        df.to_pickle(args.output + "/log.pkl")
         n += 1
 
         # printing iteration resume
