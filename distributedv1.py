@@ -36,7 +36,7 @@ def evaluate(actor, env, memory=None, n_episodes=1, random=False, noise=None, re
             if noise is not None:
                 action += noise.sample()
 
-            return np.clip(action, -1, 1)
+            return np.clip(action, -max_action, max_action)
 
     else:
         def policy(state):
@@ -85,6 +85,7 @@ def train(n_episodes, output=None, debug=False, render=False):
     """
 
     total_steps = 0
+    step_cpt = 0
     n = 0
     df = pd.DataFrame(columns=["total_steps", "average_score", "best_score"] +
                       ["score_{}".format(i) for i in range(args.n_actor)])
@@ -98,6 +99,7 @@ def train(n_episodes, output=None, debug=False, render=False):
             f, steps = evaluate(agent.actors[i], envs[i], n_episodes=n_episodes,
                                 noise=a_noise, random=random, memory=memory)
             total_steps += steps
+            step_cpt += steps
 
             # print score
             prCyan('noisy RL agent fitness:{}'.format(f))
@@ -105,28 +107,31 @@ def train(n_episodes, output=None, debug=False, render=False):
         for i in range(args.n_actor):
             agent.train(steps, i)
 
-        fs = []
-        for i in range(args.n_actor):
-            f, _ = evaluate(
-                agent.actors[i], envs[i], n_episodes=n_episodes)
-            fs.append(f)
-
-            # print score
-            prRed('RL agent fitness:{}'.format(f))
-
         # saving models and scores
-        os.makedirs(args.output + "/{}_steps".format(total_steps),
-                    exist_ok=True)
-        agent.save(args.output + "/{}_steps".format(total_steps))
+        if step_cpt >= args.period:
 
-        # saving scores
-        res = {"total_steps": total_steps,
-               "average_score": np.mean(fs), "best_score": np.max(fs)}
-        for i in range(args.n_actor):
-            res["score_{}".format(i)] = fs[i]
-        df = df.append(res, ignore_index=True)
-        df.to_pickle(args.output + "/log.pkl")
-        n += 1
+            step_cpt = 0
+            os.makedirs(args.output + "/{}_steps".format(total_steps),
+                        exist_ok=True)
+            agent.save(args.output + "/{}_steps".format(total_steps))
+
+            fs = []
+            for i in range(args.n_actor):
+                f, _ = evaluate(
+                    agent.actors[i], envs[i], n_episodes=args.n_eval)
+                fs.append(f)
+
+                # print score
+                prRed('RL agent fitness:{}'.format(f))
+
+            # saving scores
+            res = {"total_steps": total_steps,
+                   "average_score": np.mean(fs), "best_score": np.max(fs)}
+            for i in range(args.n_actor):
+                res["score_{}".format(i)] = fs[i]
+            df = df.append(res, ignore_index=True)
+            df.to_pickle(args.output + "/log.pkl")
+            n += 1
 
         # printing iteration resume
         if debug:
@@ -174,6 +179,8 @@ if __name__ == "__main__":
     # Training parameters
     parser.add_argument('--n_actor', default=1, type=int)
     parser.add_argument('--n_episodes', default=1, type=int)
+    parser.add_argument('--n_eval', default=10, type=int)
+    parser.add_argument('--period', default=5000, type=int)
     parser.add_argument('--max_steps', default=1000000, type=int)
     parser.add_argument('--mem_size', default=1000000, type=int)
 
@@ -204,12 +211,12 @@ if __name__ == "__main__":
     # Random seed
     if args.seed > 0:
         np.random.seed(args.seed)
-        for i in range(args.n_actor):
-            envs[i].seed(args.seed)
+        for j in range(args.n_actor):
+            envs[j].seed(args.seed)
         torch.manual_seed(args.seed)
 
     # replay buffer
-    memory = SharedMemory(args.mem_size, state_dim, action_dim)
+    memory = Memory(args.mem_size, state_dim, action_dim)
 
     # agent
     if args.ou_noise:
