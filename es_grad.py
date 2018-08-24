@@ -266,8 +266,8 @@ if __name__ == "__main__":
 
     # critic
     critic = Critic(state_dim, action_dim, max_action, args)
-    # critic.load_model(
-    #     "results/ddpg_layer_gauss/HalfCheetah-v2-run2/", "critic")
+    critic.load_model(
+        "results/ddpg_5/hc/HalfCheetah-v2-run1/1000000_steps", "critic")
     critic_t = Critic(state_dim, action_dim, max_action, args)
     critic_t.load_state_dict(critic.state_dict())
 
@@ -296,11 +296,17 @@ if __name__ == "__main__":
         fitness = []
 
         # udpate some actors
+        fs_b = [None for _ in range(args.pop_size)]
         for i in range(es.popsize):
             actor.set_params(actors_params[i])
 
             u = np.random.rand()
             if u < args.p_steps and total_steps > args.start_steps:
+
+                # evaluate before
+                f, _ = evaluate(actor, env, memory=None, n_episodes=args.n_episodes,
+                                render=False)
+                fs_b[i] = f
 
                 # do some gradient descent steps
                 for _ in tqdm(range(args.n_steps)):
@@ -325,8 +331,8 @@ if __name__ == "__main__":
             prLightPurple('EA actor fitness:{}'.format(f))
 
         # update critic
-        for _ in tqdm(range(actor_steps)):
-            critic.update(memory, args.batch_size, actor_t, critic_t)
+        # for _ in tqdm(range(actor_steps)):
+        #     critic.update(memory, args.batch_size, actor_t, critic_t)
 
         # update es and agent
         es.tell(actors_params, fitness, check_points=False)
@@ -336,9 +342,13 @@ if __name__ == "__main__":
 
         # saving scores
         best_score = f
-        df = df.append({"total_steps": total_steps,
-                        "average_score": np.mean(fs),
-                        "best_score": np.max(fs)}, ignore_index=True)
+        res = {"total_steps": total_steps,
+               "average_score": np.mean(fs),
+               "best_score": np.max(fs)}
+        for i in range(args.pop_size):
+            res["score_before_{}".format(i)] = fs_b[i]
+            res["score_after_{}".format(i)] = fs[i]
+        df = df.append(res, ignore_index=True)
 
         total_steps += actor_steps
         print("Total steps", total_steps)
