@@ -13,6 +13,7 @@ import gym.spaces
 import numpy as np
 from tqdm import tqdm
 
+from ES import CMAES
 from models import RLNN
 from random_process import GaussianNoise
 from memory import Memory
@@ -283,8 +284,10 @@ if __name__ == "__main__":
         actor_t.cuda()
 
     # es
-    es = cma.CMAEvolutionStrategy(
-        actor.get_params(), 0.5, inopts={"CMA_diagonal": True, "popsize": args.pop_size})
+    # es = cma.CMAEvolutionStrategy(
+    #     actor.get_params(), 0.5, inopts={"CMA_diagonal": True, "popsize": args.pop_size})
+    es = CMAES(actor.get_size(), sigma_init=0.1,
+               pop_size=args.pop_size, antithetic=True, full=False, rank_fitness=False)
 
     # training
     total_steps = 0
@@ -292,12 +295,12 @@ if __name__ == "__main__":
 
     while total_steps < args.max_steps:
 
-        actors_params = es.ask()
+        actors_params = es.ask(args.pop_size)
         fitness = []
 
         # udpate some actors
         fs_b = [None for _ in range(args.pop_size)]
-        for i in range(es.popsize):
+        for i in range(args.pop_size):
             actor.set_params(actors_params[i])
 
             u = np.random.rand()
@@ -309,11 +312,14 @@ if __name__ == "__main__":
                 fs_b[i] = f
 
                 # do some gradient descent steps
-                for _ in tqdm(range(args.n_steps)):
+                for _ in range(args.n_steps):
                     actor.update(memory, args.batch_size, critic, actor_t)
 
                 # set new parameters
                 actors_params[i] = actor.get_params()
+
+                # print scores
+                prLightPurple('EA actor fitness before:{}'.format(f))
 
         # evaluate all actors
         actor_steps = 0
@@ -325,17 +331,18 @@ if __name__ == "__main__":
                                 render=args.render)
             actor_steps += steps
             fs.append(f)
-            fitness.append(-f)
+            # / ! \ signe
+            fitness.append(f)
 
             # print scores
-            prLightPurple('EA actor fitness:{}'.format(f))
+            prLightPurple('EA actor fitness after:{}'.format(f))
 
         # update critic
         # for _ in tqdm(range(actor_steps)):
         #     critic.update(memory, args.batch_size, actor_t, critic_t)
 
         # update es and agent
-        es.tell(actors_params, fitness, check_points=False)
+        es.tell(actors_params, fitness)
 
         # save stuff
         df.to_pickle(args.output + "/log.pkl")
