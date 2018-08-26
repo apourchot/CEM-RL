@@ -233,6 +233,7 @@ if __name__ == "__main__":
     parser.add_argument('--pop_size', default=10, type=int)
     parser.add_argument('--p_steps', default=0.5, type=float)
     parser.add_argument('--n_steps', default=1000, type=int)
+    parser.add_argument('--sigma_init', default=0.05, type=float)
 
     # Training parameters
     parser.add_argument('--n_actor', default=1, type=int)
@@ -286,7 +287,7 @@ if __name__ == "__main__":
     # es
     # es = cma.CMAEvolutionStrategy(
     #     actor.get_params(), 0.01, inopts={"CMA_diagonal": True, "popsize": args.pop_size})
-    es = CMAES(actor.get_size(), sigma_init=0.05,
+    es = CMAES(actor.get_size(), sigma_init=args.sigma_init,
                pop_size=args.pop_size, antithetic=False, full=False, rank_fitness=True)
 
     # training
@@ -334,7 +335,7 @@ if __name__ == "__main__":
             actor_steps += steps
             fs.append(f)
             # / ! \ signe
-            fitness.append(-f)
+            fitness.append(f)
 
             # print scores
             prLightPurple('EA actor fitness after:{}'.format(f))
