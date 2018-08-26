@@ -1,4 +1,5 @@
 import numpy as np
+from copy import deepcopy
 
 from Optimizers import Adam, BasicSGD
 
@@ -293,7 +294,11 @@ class CMAES:
             epsilon = np.concatenate([epsilon_half, - epsilon_half])
 
         else:
-            epsilon = np.random.randn(self.num_params, pop_size)
+            epsilon = np.random.randn(self.pop_size, self.num_params)
+
+        print(self.mu)
+        print(self.diag)
+        print(self.step_size)
 
         if self.full:
             return self.step_size * (self.coord @ np.diag(np.sqrt(self.diag)) @ epsilon).T + self.mu
@@ -318,7 +323,7 @@ class CMAES:
         idx_sorted = np.argsort(scores)
 
         # update mean
-        old_mu = self.mu
+        old_mu = deepcopy(self.mu)
         self.mu = self.weights @ solutions[idx_sorted[:self.parents]]
 
         # update evolution paths
@@ -346,7 +351,13 @@ class CMAES:
                 tmp_2.T @ np.diag(self.weights) @ tmp_2
 
         else:
-            self.cov += self.c_1 * self.p_c * self.p_c
+            # tmp_log = np.log(self.c_1 * self.p_c * self.p_c +
+            #                  self.c_mu * (self.weights @ (tmp_2 * tmp_2)))
+            # cov_log = np.log(self.cov)
+            # log_sum_exp = cov_log + np.log(1 + np.exp(tmp_log - cov_log))
+            # self.cov = np.exp(log_sum_exp)
+            self.cov = self.cov + self.c_1 * self.p_c * self.p_c + \
+                self.c_mu * (self.weights @ (tmp_2 * tmp_2))
 
         # update step size
         self.step_size *= np.exp((self.c_s / self.damps) *
@@ -361,7 +372,7 @@ class CMAES:
                 1 / np.sqrt(self.diag)) @ self.coord.T
 
         else:
-            self.diag = np.sqrt(self.cov)
+            self.diag = self.cov
             self.diag = np.real(self.diag)
             self.inv_sqrt_cov = self.coord * (
                 1 / np.sqrt(self.diag)) * self.coord.T

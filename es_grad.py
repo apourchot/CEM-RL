@@ -267,8 +267,8 @@ if __name__ == "__main__":
 
     # critic
     critic = Critic(state_dim, action_dim, max_action, args)
-    critic.load_model(
-        "results/ddpg_5/hc/HalfCheetah-v2-run1/1000000_steps", "critic")
+    # critic.load_model(
+    #     "results/ddpg_5/hc/HalfCheetah-v2-run1/1000000_steps", "critic")
     critic_t = Critic(state_dim, action_dim, max_action, args)
     critic_t.load_state_dict(critic.state_dict())
 
@@ -285,9 +285,9 @@ if __name__ == "__main__":
 
     # es
     # es = cma.CMAEvolutionStrategy(
-    #     actor.get_params(), 0.5, inopts={"CMA_diagonal": True, "popsize": args.pop_size})
-    es = CMAES(actor.get_size(), sigma_init=0.1,
-               pop_size=args.pop_size, antithetic=True, full=False, rank_fitness=False)
+    #     actor.get_params(), 0.01, inopts={"CMA_diagonal": True, "popsize": args.pop_size})
+    es = CMAES(actor.get_size(), sigma_init=0.05,
+               pop_size=args.pop_size, antithetic=False, full=False, rank_fitness=True)
 
     # training
     total_steps = 0
@@ -302,6 +302,8 @@ if __name__ == "__main__":
         fs_b = [None for _ in range(args.pop_size)]
         for i in range(args.pop_size):
             actor.set_params(actors_params[i])
+            actor.optimizer = torch.optim.Adam(
+                actor.parameters(), lr=args.actor_lr)
 
             u = np.random.rand()
             if u < args.p_steps and total_steps > args.start_steps:
@@ -332,18 +334,17 @@ if __name__ == "__main__":
             actor_steps += steps
             fs.append(f)
             # / ! \ signe
-            fitness.append(f)
+            fitness.append(-f)
 
             # print scores
             prLightPurple('EA actor fitness after:{}'.format(f))
 
         # update critic
-        # for _ in tqdm(range(actor_steps)):
-        #     critic.update(memory, args.batch_size, actor_t, critic_t)
+        for _ in tqdm(range(actor_steps)):
+            critic.update(memory, args.batch_size, actor_t, critic_t)
 
         # update es and agent
         es.tell(actors_params, fitness)
-
         # save stuff
         df.to_pickle(args.output + "/log.pkl")
 
