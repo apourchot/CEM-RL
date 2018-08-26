@@ -216,7 +216,7 @@ class GES:
         return np.copy(self.mu), np.copy(self.sigma ** 2)
 
 
-class CMAES:
+class sepCMAES:
 
     """
     CMAES implementation adapted from
@@ -231,7 +231,6 @@ class CMAES:
                  pop_size=255,
                  antithetic=False,
                  weight_decay=0.01,
-                 full=False,
                  rank_fitness=True):
 
         # distribution parameters
@@ -240,23 +239,13 @@ class CMAES:
             self.mu = np.array(mu_init)
         else:
             self.mu = np.zeros(num_params)
+        self.antithetic = antithetic
 
+        # stuff
         self.step_size = step_size_init
-        self.diag = sigma_init ** 2 * np.ones(num_params)
         self.p_c = np.zeros(self.num_params)
         self.p_s = np.zeros(self.num_params)
-        self.antithetic = antithetic
-        self.full = full
-
-        if self.full:
-            self.coord = np.eye(num_params)
-            self.cov = sigma_init ** 2 * np.eye(num_params)
-            self.inv_sqrt_cov = 1 / sigma_init * np.eye(num_params)
-
-        else:
-            self.coord = np.ones(num_params)
-            self.cov = sigma_init ** 2 * np.ones(num_params)
-            self.inv_sqrt_cov = 1 / sigma_init * np.ones(num_params)
+        self.cov = sigma_init ** 2 * np.ones(num_params)
 
         # selection parameters
         self.pop_size = pop_size
@@ -270,20 +259,17 @@ class CMAES:
 
         # adaptation  parameters
         self.c_s = (self.parents_eff + 2) / \
-            (self.num_params + self.parents_eff + 5)
-        self.c_c = (4 + self.parents_eff / self.num_params) / \
-            (self.num_params + 4 + 2 * self.parents_eff / self.num_params)
-        self.c_1 = 2 / ((self.num_params + 1.3) ** 2 + self.parents_eff)
-        self.c_mu = min(1 - self.c_1, 2 * (self.parents_eff - 2 + 1 /
-                                           self.parents_eff) / ((self.num_params + 2) ** 2
-                                                                + self.parents_eff))
-        self.damps = 1 + 2 * \
+            (self.num_params + self.parents_eff + 3)
+        self.c_c = 4 / (self.num_params + 4)
+        self.c_cov = 1 / self.parents_eff * 2 / ((self.num_params + np.sqrt(2)) ** 2) + (1 - 1 / self.parents_eff) * \
+            min(1, (2 * self.parents_eff - 1) /
+                (self.parents_eff + (self.num_params + 2) ** 2))
+        self.c_cov *= (self.num_params + 2) / 3
+        self.d_s = 1 + 2 * \
             max(0, np.sqrt((self.parents_eff - 1) /
-                           (self.num_params + 1)) - 1) + self.c_s
-        self.chi = np.sqrt(self.num_params) * \
-            (1 - 1 / (4 * self.num_params) + 1 / (21 * self.num_params ** 2))
-        self.count_eval = 0
-        self.eigen_eval = 0
+                           (self.num_params + 1) - 1)) + self.c_s
+        self.chi = np.sqrt(self.num_params) * (1 - 1 / (4 *
+                                                        self.num_params) + 1 / (21 * self.num_params ** 2))
 
     def ask(self, pop_size):
         """
@@ -297,14 +283,10 @@ class CMAES:
             epsilon = np.random.randn(self.pop_size, self.num_params)
 
         print(self.mu)
-        print(self.diag)
+        print(self.cov)
         print(self.step_size)
 
-        if self.full:
-            return self.step_size * (self.coord @ np.diag(np.sqrt(self.diag)) @ epsilon).T + self.mu
-
-        else:
-            return self.mu + self.step_size * epsilon * np.sqrt(self.diag)
+        return self.mu + self.step_size * epsilon * np.sqrt(self.cov)
 
     def tell(self, solutions, scores):
         """
@@ -329,7 +311,7 @@ class CMAES:
         # update evolution paths
         self.p_s = (1 - self.c_s) * self.p_s + \
             np.sqrt(self.c_s * (2 - self.c_s) * self.parents_eff) * \
-            self.inv_sqrt_cov @ (self.mu - old_mu) / self.step_size
+            (self.mu - old_mu) / self.step_size * 1 / np.sqrt(self.cov)
 
         tmp_1 = np.linalg.norm(self.p_s) / np.sqrt(self.c_s * (2 - self.c_s)) \
             <= self.chi * (1.4 + 2 / (self.num_params + 1))
@@ -342,40 +324,14 @@ class CMAES:
         tmp_2 = 1 / self.step_size * \
             (solutions[idx_sorted[:self.parents]] - old_mu)
 
-        self.cov = (1 - self.c_1 - self.c_mu) * self.cov + \
-            (1 - tmp_1) * self.c_1 * self.c_c * (2 - self.c_c) * self.cov
-
-        if self.full:
-            self.cov += self.c_1 * \
-                np.outer(self.p_c, self.p_c) + self.c_mu * \
-                tmp_2.T @ np.diag(self.weights) @ tmp_2
-
-        else:
-            # tmp_log = np.log(self.c_1 * self.p_c * self.p_c +
-            #                  self.c_mu * (self.weights @ (tmp_2 * tmp_2)))
-            # cov_log = np.log(self.cov)
-            # log_sum_exp = cov_log + np.log(1 + np.exp(tmp_log - cov_log))
-            # self.cov = np.exp(log_sum_exp)
-            self.cov = self.cov + self.c_1 * self.p_c * self.p_c + \
-                self.c_mu * (self.weights @ (tmp_2 * tmp_2))
+        self.cov = (1 - self.c_cov) * self.cov + \
+            self.c_cov * 1 / self.parents_eff * self.p_c * self.p_c + \
+            self.c_cov * (1 - 1 / self.parents_eff) * \
+            (self.weights @ (tmp_2 * tmp_2))
 
         # update step size
-        self.step_size *= np.exp((self.c_s / self.damps) *
+        self.step_size *= np.exp((self.c_s / self.d_s) *
                                  (np.linalg.norm(self.p_s) / self.chi - 1))
-
-        # decomposition of C
-        if self.full:
-            self.cov = np.triu(self.cov) + np.triu(self.cov, 1).T
-            self.diag, self.coord = np.linalg.eigh(self.cov)
-            self.diag = np.real(self.diag)
-            self.inv_sqrt_cov = self.coord @ np.diag(
-                1 / np.sqrt(self.diag)) @ self.coord.T
-
-        else:
-            self.diag = self.cov
-            self.diag = np.real(self.diag)
-            self.inv_sqrt_cov = self.coord * (
-                1 / np.sqrt(self.diag)) * self.coord.T
 
         return idx_sorted[:self.parents]
 

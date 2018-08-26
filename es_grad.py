@@ -13,7 +13,7 @@ import gym.spaces
 import numpy as np
 from tqdm import tqdm
 
-from ES import CMAES
+from ES import sepCMAES
 from models import RLNN
 from random_process import GaussianNoise
 from memory import Memory
@@ -268,8 +268,8 @@ if __name__ == "__main__":
 
     # critic
     critic = Critic(state_dim, action_dim, max_action, args)
-    # critic.load_model(
-    #     "results/ddpg_5/hc/HalfCheetah-v2-run1/1000000_steps", "critic")
+    critic.load_model(
+        "results/ddpg_5/hc/HalfCheetah-v2-run1/1000000_steps", "critic")
     critic_t = Critic(state_dim, action_dim, max_action, args)
     critic_t.load_state_dict(critic.state_dict())
 
@@ -287,8 +287,8 @@ if __name__ == "__main__":
     # es
     # es = cma.CMAEvolutionStrategy(
     #     actor.get_params(), 0.01, inopts={"CMA_diagonal": True, "popsize": args.pop_size})
-    es = CMAES(actor.get_size(), sigma_init=args.sigma_init,
-               pop_size=args.pop_size, antithetic=False, full=False, rank_fitness=True)
+    es = sepCMAES(actor.get_size(), sigma_init=args.sigma_init,
+                  pop_size=args.pop_size, antithetic=False, rank_fitness=True)
 
     # training
     total_steps = 0
@@ -341,8 +341,8 @@ if __name__ == "__main__":
             prLightPurple('EA actor fitness after:{}'.format(f))
 
         # update critic
-        for _ in tqdm(range(actor_steps)):
-            critic.update(memory, args.batch_size, actor_t, critic_t)
+        # for _ in tqdm(range(actor_steps)):
+        #     critic.update(memory, args.batch_size, actor_t, critic_t)
 
         # update es and agent
         es.tell(actors_params, fitness)
