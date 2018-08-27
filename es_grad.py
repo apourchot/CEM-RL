@@ -232,7 +232,7 @@ if __name__ == "__main__":
     # ES parameters
     parser.add_argument('--pop_size', default=10, type=int)
     parser.add_argument('--p_steps', default=0.5, type=float)
-    parser.add_argument('--n_steps', default=1000, type=int)
+    parser.add_argument('--lf', default=1, type=float)
     parser.add_argument('--sigma_init', default=0.05, type=float)
 
     # Training parameters
@@ -268,8 +268,8 @@ if __name__ == "__main__":
 
     # critic
     critic = Critic(state_dim, action_dim, max_action, args)
-    critic.load_model(
-        "results/ddpg_5/hc/HalfCheetah-v2-run1/1000000_steps", "critic")
+    # critic.load_model(
+    #     "results/ddpg_5/hc/HalfCheetah-v2-run1/1000000_steps", "critic")
     critic_t = Critic(state_dim, action_dim, max_action, args)
     critic_t.load_state_dict(critic.state_dict())
 
@@ -310,12 +310,14 @@ if __name__ == "__main__":
             if u < args.p_steps and total_steps > args.start_steps:
 
                 # evaluate before
-                f, _ = evaluate(actor, env, memory=None, n_episodes=args.n_episodes,
-                                render=False)
+                f, steps = evaluate(actor, env, memory=None, n_episodes=args.n_episodes,
+                                    render=False)
                 fs_b[i] = f
 
+                print(steps)
+
                 # do some gradient descent steps
-                for _ in range(args.n_steps):
+                for _ in range(int(args.lf * steps)):
                     actor.update(memory, args.batch_size, critic, actor_t)
 
                 # set new parameters
@@ -341,8 +343,8 @@ if __name__ == "__main__":
             prLightPurple('EA actor fitness after:{}'.format(f))
 
         # update critic
-        # for _ in tqdm(range(actor_steps)):
-        #     critic.update(memory, args.batch_size, actor_t, critic_t)
+        for _ in tqdm(range(actor_steps)):
+            critic.update(memory, args.batch_size, actor_t, critic_t)
 
         # update es and agent
         es.tell(actors_params, fitness)
