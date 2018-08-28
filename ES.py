@@ -292,14 +292,6 @@ class sepCMAES:
         """
         Updates the distribution
         """
-        # scores preprocess
-        reward = np.array(scores)
-        if self.rank_fitness:
-            reward = compute_centered_ranks(reward)
-
-        if self.weight_decay > 0:
-            l2_decay = compute_weight_decay(self.weight_decay, solutions)
-            reward += l2_decay
 
         scores = -np.array(scores)
         idx_sorted = np.argsort(scores)

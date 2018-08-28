@@ -231,7 +231,7 @@ if __name__ == "__main__":
 
     # ES parameters
     parser.add_argument('--pop_size', default=10, type=int)
-    parser.add_argument('--p_steps', default=0.5, type=float)
+    parser.add_argument('--n_grad', default=1, type=int)
     parser.add_argument('--lf', default=1, type=float)
     parser.add_argument('--sigma_init', default=0.05, type=float)
 
@@ -286,9 +286,10 @@ if __name__ == "__main__":
 
     # es
     # es = cma.CMAEvolutionStrategy(
-    #     actor.get_params(), 0.01, inopts={"CMA_diagonal": True, "popsize": args.pop_size})
+    #     np.zeros(actor.get_params().shape), args.sigma_init, inopts={"CMA_diagonal": True, "popsize": args.pop_size})
+
     es = sepCMAES(actor.get_size(), sigma_init=args.sigma_init,
-                  pop_size=args.pop_size, antithetic=False, rank_fitness=True)
+                  pop_size=args.pop_size, antithetic=False)
 
     # training
     total_steps = 0
@@ -301,20 +302,19 @@ if __name__ == "__main__":
 
         # udpate some actors
         fs_b = [None for _ in range(args.pop_size)]
-        for i in range(args.pop_size):
-            actor.set_params(actors_params[i])
-            actor.optimizer = torch.optim.Adam(
-                actor.parameters(), lr=args.actor_lr)
 
-            u = np.random.rand()
-            if u < args.p_steps and total_steps > args.start_steps:
+        if total_steps > args.start_steps:
+
+            for i in range(args.n_grad):
+
+                actor.set_params(actors_params[i])
+                actor.optimizer = torch.optim.Adam(
+                    actor.parameters(), lr=args.actor_lr)
 
                 # evaluate before
                 f, steps = evaluate(actor, env, memory=None, n_episodes=args.n_episodes,
                                     render=False)
                 fs_b[i] = f
-
-                print(steps)
 
                 # do some gradient descent steps
                 for _ in range(int(args.lf * steps)):
@@ -324,7 +324,7 @@ if __name__ == "__main__":
                 actors_params[i] = actor.get_params()
 
                 # print scores
-                prLightPurple('EA actor fitness before:{}'.format(f))
+                prGreen('EA actor fitness before:{}'.format(f))
 
         # evaluate all actors
         actor_steps = 0
@@ -343,8 +343,8 @@ if __name__ == "__main__":
             prLightPurple('EA actor fitness after:{}'.format(f))
 
         # update critic
-        for _ in tqdm(range(actor_steps)):
-            critic.update(memory, args.batch_size, actor_t, critic_t)
+        # for _ in tqdm(range(actor_steps)):
+        #     critic.update(memory, args.batch_size, actor_t, critic_t)
 
         # update es and agent
         es.tell(actors_params, fitness)
