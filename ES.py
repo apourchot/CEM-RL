@@ -258,6 +258,7 @@ class sepCMAES:
         self.weight_decay = weight_decay
 
         # adaptation  parameters
+        self.g = 1
         self.c_s = (self.parents_eff + 2) / \
             (self.num_params + self.parents_eff + 3)
         self.c_c = 4 / (self.num_params + 4)
@@ -277,6 +278,7 @@ class sepCMAES:
         """
         if self.antithetic:
             epsilon_half = np.random.randn(self.pop_size // 2, self.num_params)
+            self.epsilon = np.concatenate([epsilon_half, - epsilon_half])
 
         else:
             self.epsilon = np.random.randn(self.pop_size, self.num_params)
@@ -309,22 +311,23 @@ class sepCMAES:
         self.p_s = (1 - self.c_s) * self.p_s + \
             np.sqrt(self.c_s * (2 - self.c_s) * self.parents_eff) * z_w
 
-        tmp_1 = np.linalg.norm(self.p_s) / np.sqrt(self.c_s * (2 - self.c_s)) \
+        tmp_1 = np.linalg.norm(self.p_s) / np.sqrt(1 - (1 - self.c_s) ** (2 * self.g)) \
             <= self.chi * (1.4 + 2 / (self.num_params + 1))
 
         self.p_c = (1 - self.c_c) * self.p_c + \
             tmp_1 * np.sqrt(self.c_c * (2 - self.c_c)
-                            * self.parents_eff) * z_w
+                            * self.parents_eff) * np.sqrt(self.cov) * z_w
 
         # update covariance matrix
         self.cov = (1 - self.c_cov) * self.cov + \
             self.c_cov * 1 / self.parents_eff * self.p_c * self.p_c + \
             self.c_cov * (1 - 1 / self.parents_eff) * \
-            (self.weights @ (z * z))
+            (self.weights @ (self.cov * z * z))
 
         # update step size
         self.step_size *= np.exp((self.c_s / self.d_s) *
                                  (np.linalg.norm(self.p_s) / self.chi - 1))
+        self.g += 1
 
         return idx_sorted[:self.parents]
 

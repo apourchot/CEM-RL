@@ -93,7 +93,7 @@ def evaluate(actor, env, memory=None, n_episodes=1, random=False, noise=None, re
             if noise is not None:
                 action += noise.sample()
 
-            return np.clip(action, -1, 1)
+            return np.clip(action, -max_action, max_action)
 
     else:
         def policy(state):
@@ -293,7 +293,8 @@ if __name__ == "__main__":
 
     # training
     total_steps = 0
-    df = pd.DataFrame(columns=["total_steps", "average_score", "best_score"])
+    df = pd.DataFrame(
+        columns=["total_steps", "average_score", "average_score_half", "best_score"])
 
     while total_steps < args.max_steps:
 
@@ -343,8 +344,8 @@ if __name__ == "__main__":
             prLightPurple('EA actor fitness after:{}'.format(f))
 
         # update critic
-        for _ in tqdm(range(actor_steps)):
-            critic.update(memory, args.batch_size, actor_t, critic_t)
+        # for _ in tqdm(range(actor_steps)):
+        #     critic.update(memory, args.batch_size, actor_t, critic_t)
 
         # update es and agent
         es.tell(actors_params, fitness)
@@ -352,14 +353,15 @@ if __name__ == "__main__":
         df.to_pickle(args.output + "/log.pkl")
 
         # saving scores
-        best_score = f
+        total_steps += actor_steps
         res = {"total_steps": total_steps,
                "average_score": np.mean(fs),
+               "average_score_half": np.mean(np.partition(fs, args.pop_size // 2 - 1)[args.pop_size // 2:]),
                "best_score": np.max(fs)}
+        print(res)
         for i in range(args.pop_size):
             res["score_before_{}".format(i)] = fs_b[i]
             res["score_after_{}".format(i)] = fs[i]
         df = df.append(res, ignore_index=True)
 
-        total_steps += actor_steps
         print("Total steps", total_steps)
