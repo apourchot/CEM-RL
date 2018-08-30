@@ -289,7 +289,7 @@ if __name__ == "__main__":
     #     np.zeros(actor.get_params().shape), args.sigma_init, inopts={"CMA_diagonal": True, "popsize": args.pop_size})
 
     es = sepCMAES(actor.get_size(), sigma_init=args.sigma_init,
-                  pop_size=args.pop_size, antithetic=False)
+                  pop_size=args.pop_size, antithetic=True)
 
     # training
     total_steps = 0
@@ -337,14 +337,14 @@ if __name__ == "__main__":
             actor_steps += steps
             fs.append(f)
             # / ! \ signe
-            fitness.append(f)
+            fitness.append(-f)
 
             # print scores
             prLightPurple('EA actor fitness after:{}'.format(f))
 
         # update critic
-        # for _ in tqdm(range(actor_steps)):
-        #     critic.update(memory, args.batch_size, actor_t, critic_t)
+        for _ in tqdm(range(actor_steps)):
+            critic.update(memory, args.batch_size, actor_t, critic_t)
 
         # update es and agent
         es.tell(actors_params, fitness)

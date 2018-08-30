@@ -245,12 +245,12 @@ class sepCMAES:
         self.step_size = step_size_init
         self.p_c = np.zeros(self.num_params)
         self.p_s = np.zeros(self.num_params)
-        self.cov = sigma_init ** 2 * np.ones(num_params)
+        self.cov = sigma_init * np.ones(num_params)
 
         # selection parameters
         self.pop_size = pop_size
         self.parents = pop_size // 2
-        self.weights = np.array([np.log((self.parents + 0.5) / i)
+        self.weights = np.array([np.log((self.parents + 1) / i)
                                  for i in range(1, self.parents + 1)])
         self.weights /= self.weights.sum()
         self.parents_eff = 1 / (self.weights ** 2).sum()
@@ -277,49 +277,50 @@ class sepCMAES:
         """
         if self.antithetic:
             epsilon_half = np.random.randn(self.pop_size // 2, self.num_params)
-            epsilon = np.concatenate([epsilon_half, - epsilon_half])
 
         else:
-            epsilon = np.random.randn(self.pop_size, self.num_params)
+            self.epsilon = np.random.randn(self.pop_size, self.num_params)
 
-        print(self.mu)
-        print(self.cov)
-        print(self.step_size)
+        # print(self.mu)
+        # print(self.cov)
+        # print(self.step_size)
 
-        return self.mu + self.step_size * epsilon * np.sqrt(self.cov)
+        return self.mu + self.step_size * self.epsilon * np.sqrt(self.cov)
 
     def tell(self, solutions, scores):
         """
         Updates the distribution
         """
 
-        scores = -np.array(scores)
         idx_sorted = np.argsort(scores)
+        # print(idx_sorted)
+        # print(idx_sorted[:self.parents])
+        # tmp = np.array(scores)
+        # print(tmp[idx_sorted])
 
         # update mean
         old_mu = deepcopy(self.mu)
         self.mu = self.weights @ solutions[idx_sorted[:self.parents]]
+        z = 1 / self.step_size * 1 / \
+            np.sqrt(self.cov) * (solutions[idx_sorted[:self.parents]] - old_mu)
+        z_w = self.weights @ z
 
         # update evolution paths
         self.p_s = (1 - self.c_s) * self.p_s + \
-            np.sqrt(self.c_s * (2 - self.c_s) * self.parents_eff) * \
-            (self.mu - old_mu) / self.step_size * 1 / np.sqrt(self.cov)
+            np.sqrt(self.c_s * (2 - self.c_s) * self.parents_eff) * z_w
 
         tmp_1 = np.linalg.norm(self.p_s) / np.sqrt(self.c_s * (2 - self.c_s)) \
             <= self.chi * (1.4 + 2 / (self.num_params + 1))
 
         self.p_c = (1 - self.c_c) * self.p_c + \
-            tmp_1 * np.sqrt(self.c_c * (2 - self.c_c) * self.parents_eff) * \
-            (self.mu - old_mu) / self.step_size
+            tmp_1 * np.sqrt(self.c_c * (2 - self.c_c)
+                            * self.parents_eff) * z_w
 
         # update covariance matrix
-        tmp_2 = 1 / self.step_size * \
-            (solutions[idx_sorted[:self.parents]] - old_mu)
-
         self.cov = (1 - self.c_cov) * self.cov + \
             self.c_cov * 1 / self.parents_eff * self.p_c * self.p_c + \
             self.c_cov * (1 - 1 / self.parents_eff) * \
-            (self.weights @ (tmp_2 * tmp_2))
+            (self.weights @ (z * z))
 
         # update step size
         self.step_size *= np.exp((self.c_s / self.d_s) *
