@@ -231,6 +231,7 @@ if __name__ == "__main__":
 
     # ES parameters
     parser.add_argument('--pop_size', default=10, type=int)
+    parser.add_argument('--parents', default=-1, type=int)
     parser.add_argument('--n_grad', default=1, type=int)
     parser.add_argument('--lf', default=1, type=float)
     parser.add_argument('--sigma_init', default=0.05, type=float)
@@ -289,8 +290,10 @@ if __name__ == "__main__":
     # es = cma.CMAEvolutionStrategy(
     #     np.zeros(actor.get_params().shape), args.sigma_init, inopts={"CMA_diagonal": True, "popsize": args.pop_size})
 
+    if args.parents < 0:
+        args.parents = args.pop_size // 2
     es = sepCEM(actor.get_size(), sigma_init=args.sigma_init, damp=args.damp,
-                pop_size=args.pop_size, antithetic=True)
+                pop_size=args.pop_size, antithetic=True, parents=args.parents)
 
     # training
     total_steps = 0

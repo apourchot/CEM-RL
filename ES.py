@@ -342,7 +342,7 @@ class sepCEM:
                  sigma_init=0.1,
                  pop_size=256,
                  damp=0.01,
-                 parents=None
+                 parents=None,
                  antithetic=False):
 
         # misc
