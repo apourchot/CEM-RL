@@ -13,7 +13,7 @@ import gym.spaces
 import numpy as np
 from tqdm import tqdm
 
-from ES import sepCMAES
+from ES import sepCMAES, sepCEM
 from models import RLNN
 from random_process import GaussianNoise
 from memory import Memory
@@ -234,6 +234,7 @@ if __name__ == "__main__":
     parser.add_argument('--n_grad', default=1, type=int)
     parser.add_argument('--lf', default=1, type=float)
     parser.add_argument('--sigma_init', default=0.05, type=float)
+    parser.add_argument('--damp', default=0.001, type=float)
 
     # Training parameters
     parser.add_argument('--n_actor', default=1, type=int)
@@ -288,8 +289,8 @@ if __name__ == "__main__":
     # es = cma.CMAEvolutionStrategy(
     #     np.zeros(actor.get_params().shape), args.sigma_init, inopts={"CMA_diagonal": True, "popsize": args.pop_size})
 
-    es = sepCMAES(actor.get_size(), sigma_init=args.sigma_init,
-                  pop_size=args.pop_size, antithetic=True)
+    es = sepCEM(actor.get_size(), sigma_init=args.sigma_init, damp=args.damp,
+                pop_size=args.pop_size, antithetic=True)
 
     # training
     total_steps = 0

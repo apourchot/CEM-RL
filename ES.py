@@ -277,17 +277,13 @@ class sepCMAES:
         Returns a list of candidates parameters
         """
         if self.antithetic:
-            epsilon_half = np.random.randn(self.pop_size // 2, self.num_params)
-            self.epsilon = np.concatenate([epsilon_half, - epsilon_half])
+            epsilon_half = np.random.randn(pop_size // 2, self.num_params)
+            epsilon = np.concatenate([epsilon_half, - epsilon_half])
 
         else:
-            self.epsilon = np.random.randn(self.pop_size, self.num_params)
+            epsilon = np.random.randn(pop_size, self.num_params)
 
-        # print(self.mu)
-        # print(self.cov)
-        # print(self.step_size)
-
-        return self.mu + self.step_size * self.epsilon * np.sqrt(self.cov)
+        return self.mu + self.step_size * epsilon * np.sqrt(self.cov)
 
     def tell(self, solutions, scores):
         """
@@ -295,10 +291,6 @@ class sepCMAES:
         """
 
         idx_sorted = np.argsort(scores)
-        # print(idx_sorted)
-        # print(idx_sorted[:self.parents])
-        # tmp = np.array(scores)
-        # print(tmp[idx_sorted])
 
         # update mean
         old_mu = deepcopy(self.mu)
@@ -337,3 +329,76 @@ class sepCMAES:
         the mean and the covariance matrix
         """
         return np.copy(self.mu), np.copy(self.step_size)**2 * np.copy(self.cov)
+
+
+class sepCEM:
+
+    """
+    Cross-entropy methods.
+    """
+
+    def __init__(self, num_params,
+                 mu_init=None,
+                 sigma_init=0.1,
+                 pop_size=256,
+                 damp=0.01,
+                 antithetic=False):
+
+        # misc
+        self.num_params = num_params
+
+        # distribution parameters
+        if mu_init is None:
+            self.mu = np.zeros(self.num_params)
+        else:
+            self.mu = np.array(mu_init)
+        self.sigma = sigma_init
+        self.damp = damp
+        self.cov = self.sigma * np.ones(self.num_params)
+
+        # sampling stuff
+        self.pop_size = pop_size
+        self.antithetic = antithetic
+        if self.antithetic:
+            assert (self.pop_size % 2 == 0), "Population size must be even"
+        self.parents = pop_size // 2
+        self.weights = np.array([np.log((self.parents + 1) / i)
+                                 for i in range(1, self.parents + 1)])
+        self.weights /= self.weights.sum()
+
+    def ask(self, pop_size):
+        """
+        Returns a list of candidates parameters
+        """
+        if self.antithetic:
+            epsilon_half = np.random.randn(pop_size // 2, self.num_params)
+            epsilon = np.concatenate([epsilon_half, - epsilon_half])
+
+        else:
+            epsilon = np.random.randn(pop_size, self.num_params)
+
+        return self.mu + epsilon * np.sqrt(self.cov)
+
+    def tell(self, solutions, scores):
+        """
+        Updates the distribution
+        """
+        assert(len(scores) ==
+               self.pop_size), "Inconsistent reward_table size reported."
+
+        idx_sorted = np.argsort(scores)
+
+        old_mu = np.copy(self.mu)
+        self.mu = self.weights @ solutions[idx_sorted[:self.parents]]
+        # z = (solutions[idx_sorted[:self.parents]] - old_mu)
+        # self.cov = 1 / self.parents * \
+        #     self.weights @ (z * z) + self.damp * np.ones(self.num_params)
+
+        return idx_sorted[-self.parents:]
+
+    def get_distrib_params(self):
+        """
+        Returns the parameters of the distrubtion:
+        the mean and sigma
+        """
+        return np.copy(self.mu), np.copy(self.cov)
