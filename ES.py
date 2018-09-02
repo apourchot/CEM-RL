@@ -342,6 +342,7 @@ class sepCEM:
                  sigma_init=0.1,
                  pop_size=256,
                  damp=0.01,
+                 parents=None
                  antithetic=False):
 
         # misc
@@ -361,7 +362,10 @@ class sepCEM:
         self.antithetic = antithetic
         if self.antithetic:
             assert (self.pop_size % 2 == 0), "Population size must be even"
-        self.parents = pop_size // 2
+        if parents is None:
+            self.parents = pop_size // 2
+        else:
+            self.parents = parents
         self.weights = np.array([np.log((self.parents + 1) / i)
                                  for i in range(1, self.parents + 1)])
         self.weights /= self.weights.sum()
