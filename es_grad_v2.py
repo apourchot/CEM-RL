@@ -269,7 +269,7 @@ if __name__ == "__main__":
     # critic
     critic = Critic(state_dim, action_dim, max_action, args)
     # critic.load_model(
-    #     "results/ddpg_5/hc/HalfCheetah-v2-run1/1000000_steps", "critic")
+    #     "results/ddpg_layer/hc/HalfCheetah-v2-run1/1000000_steps", "critic")
     critic_t = Critic(state_dim, action_dim, max_action, args)
     critic_t.load_state_dict(critic.state_dict())
 
@@ -343,12 +343,10 @@ if __name__ == "__main__":
                 prGreen('RL actor fitness:{}'.format(f))
 
         # combine rl and ea and update ea
-        fitness = np.array(fitness_rl + fitness_ea)
+        fitness = np.array(fitness_ea + fitness_rl)
         params = ea_params if len(rl_params) == 0 else np.concatenate(
             (ea_params, rl_params), axis=0)
-        idx_sorted = np.argsort(fitness)
-        es.tell(params[idx_sorted[-args.pop_size:]],
-                - fitness[idx_sorted[-args.pop_size:]])
+        es.tell(params, -fitness)
 
         # save stuff
         df.to_pickle(args.output + "/log.pkl")
