@@ -290,32 +290,52 @@ if __name__ == "__main__":
             actors[i].cuda()
             actors_t[i].cuda()
 
-    # es
-    # es = cma.CMAEvolutionStrategy(
-    #     np.zeros(actor.get_params().shape), args.sigma_init, inopts={"CMA_diagonal": True, "popsize": args.pop_size})
-
+    # CEM
     es = sepCEM(actors[0].get_size(), sigma_init=args.sigma_init, damp=args.damp,
                 pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.n_grad)
-    weights = np.array([np.log((args.n_grad + 1) / i)
-                        for i in range(1, args.n_grad + 1)])
-    weights /= weights.sum()
 
     # training
     total_steps = 0
+    actor_steps = 0
     step_cpt = 0
     df = pd.DataFrame(columns=["total_steps", "average_score",
                                "average_score_rl", "average_score_ea", "best_score"])
     while total_steps < args.max_steps:
 
-        fitness_ea = []
         fitness_rl = []
+        fitness_ea = []
+        rl_params = []
         ea_params = es.ask(args.pop_size)
+
+        # udpate the rl actors and the critic
+        if total_steps > args.start_steps:
+
+            for i in range(args.n_grad):
+
+                # actor update
+                for _ in range(1):  # actor_steps):
+                    actors[i].update(memory, args.batch_size,
+                                     critic, actors_t[i])
+
+                # critic update
+                for _ in range(1):  # actor_steps // args.n_grad):
+                    critic.update(memory, args.batch_size, actors[i], critic_t)
+
+                # evaluate
+                f, steps = evaluate(actors[i], env, memory=memory, n_episodes=args.n_episodes,
+                                    render=args.render)
+                actor_steps += steps
+                rl_params.append(actors[i].get_params())
+                fitness_rl.append(f)
+
+            # print scores
+            prRed('RL actor fitness:{}'.format(f))
 
         # evaluate all actors
         actor_steps = 0
-        for actor_params in ea_params:
+        for params in ea_params:
 
-            actor_ea.set_params(actor_params)
+            actor_ea.set_params(params)
             f, steps = evaluate(actor_ea, env, memory=memory, n_episodes=args.n_episodes,
                                 render=args.render)
             actor_steps += steps
@@ -323,51 +343,6 @@ if __name__ == "__main__":
 
             # print scores
             prLightPurple('EA actor fitness:{}'.format(f))
-
-        # noisy actors
-        for i in range(args.n_grad):
-
-            # evaluate
-            f, steps = evaluate(actors[i], env, memory=memory, n_episodes=args.n_episodes,
-                                render=False, noise=a_noise)
-            actor_steps += steps
-
-            # print scores
-            prCyan('RL noisy actor fitness:{}'.format(f))
-
-        # udpate the rl actors
-        rl_params = []
-        if total_steps > args.start_steps:
-
-            # critic update
-            for _ in tqdm(range(actor_steps)):
-                critic.update(memory, args.batch_size, actors_t[i], critic_t)
-
-            for i in range(args.n_grad):
-
-                # do some gradient descent steps
-                for _ in range(actor_steps):
-                    actors[i].update(memory, args.batch_size,
-                                     critic, actors_t[i])
-
-                # evaluate
-                f, steps = evaluate(actors[i], env, memory=memory, n_episodes=args.n_episodes,
-                                    render=False)
-                actor_steps += steps
-                fitness_rl.append(f)
-                rl_params.append(actors[i].get_params())
-
-                # print scores
-                prGreen('RL actor fitness:{}'.format(f))
-
-            idx_sorted = np.argsort(np.array(fitness_rl))
-            rl_params = np.array(rl_params)
-            total_steps += actor_steps
-            mu = weights @ rl_params[idx_sorted]
-            actor_ea.set_params(mu)
-            f, _ = evaluate(actor_ea, env, memory=None, n_episodes=args.n_episodes,
-                            render=False)
-            prRed('RL mean actor fitness:{}'.format(f))
 
         # update step counts
         total_steps += actor_steps
