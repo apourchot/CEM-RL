@@ -281,6 +281,7 @@ if __name__ == "__main__":
     actor_ea = Actor(state_dim, action_dim, max_action, args)
     for i in range(args.n_grad):
         actors_t[i].load_state_dict(actors[i].state_dict())
+    a_noise = GaussianNoise(action_dim, sigma=args.gauss_sigma)
 
     if USE_CUDA:
         critic.cuda()
@@ -294,7 +295,10 @@ if __name__ == "__main__":
     #     np.zeros(actor.get_params().shape), args.sigma_init, inopts={"CMA_diagonal": True, "popsize": args.pop_size})
 
     es = sepCEM(actors[0].get_size(), sigma_init=args.sigma_init, damp=args.damp,
-                pop_size=args.pop_size, antithetic=True, parents=args.n_grad)
+                pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.n_grad)
+    weights = np.array([np.log((args.n_grad + 1) / i)
+                        for i in range(1, args.n_grad + 1)])
+    weights /= weights.sum()
 
     # training
     total_steps = 0
@@ -313,15 +317,32 @@ if __name__ == "__main__":
             actor_ea.set_params(actor_params)
             f, steps = evaluate(actor_ea, env, memory=memory, n_episodes=args.n_episodes,
                                 render=args.render)
+            total_steps += steps
             actor_steps += steps
             fitness_ea.append(f)
 
             # print scores
             prLightPurple('EA actor fitness:{}'.format(f))
 
+        # noisy actors
+        for i in range(args.n_grad):
+
+            # evaluate
+            f, steps = evaluate(actors[i], env, memory=memory, n_episodes=args.n_episodes,
+                                render=False, noise=a_noise)
+            total_steps += steps
+            actor_steps += steps
+
+            # print scores
+            prCyan('RL noisy actor fitness:{}'.format(f))
+
         # udpate the rl actors
         rl_params = []
         if total_steps > args.start_steps:
+
+            # critic update
+            for _ in tqdm(range(actor_steps)):
+                critic.update(memory, args.batch_size, actors_t[i], critic_t)
 
             for i in range(args.n_grad):
 
@@ -329,8 +350,6 @@ if __name__ == "__main__":
                 for _ in range(actor_steps):
                     actors[i].update(memory, args.batch_size,
                                      critic, actors_t[i])
-                    critic.update(memory, args.batch_size,
-                                  actors_t[i], critic_t)
 
                 # evaluate
                 f, steps = evaluate(actors[i], env, memory=memory, n_episodes=args.n_episodes,
@@ -342,15 +361,29 @@ if __name__ == "__main__":
                 # print scores
                 prGreen('RL actor fitness:{}'.format(f))
 
+            idx_sorted = np.argsort(np.array(fitness_rl))
+            rl_params = np.array(rl_params)
+            mu = weights @ rl_params[idx_sorted]
+            actor_ea.set_params(mu)
+            f, _ = evaluate(actor_ea, env, memory=None, n_episodes=args.n_episodes,
+                            render=False)
+            prRed('RL mean actor fitness:{}'.format(f))
+
         # combine rl and ea and update ea
         fitness = np.array(fitness_ea + fitness_rl)
         params = ea_params if len(rl_params) == 0 else np.concatenate(
             (ea_params, rl_params), axis=0)
-        es.tell(params, -fitness)
+        es.tell(params, fitness)
+
+        idx_sorted = np.argsort(np.array(fitness))
+        mu = weights @ params[idx_sorted[-args.n_grad:]]
+        actor_ea.set_params(mu)
+        f, _ = evaluate(actor_ea, env, memory=None, n_episodes=args.n_episodes,
+                        render=False)
+        prRed('EA mean actor fitness:{}'.format(f))
 
         # save stuff
         df.to_pickle(args.output + "/log.pkl")
-        total_steps += actor_steps
         res = {"total_steps": total_steps,
                "average_score_ea": np.mean(fitness_ea),
                "average_score_rl": np.mean(fitness_rl),
