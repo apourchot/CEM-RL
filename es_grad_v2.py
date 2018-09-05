@@ -232,7 +232,6 @@ if __name__ == "__main__":
     # ES parameters
     parser.add_argument('--pop_size', default=10, type=int)
     parser.add_argument('--n_grad', default=1, type=int)
-    parser.add_argument('--lf', default=1, type=float)
     parser.add_argument('--sigma_init', default=0.05, type=float)
     parser.add_argument('--damp', default=0.001, type=float)
 
@@ -247,6 +246,7 @@ if __name__ == "__main__":
 
     # misc
     parser.add_argument('--output', default='results', type=str)
+    parser.add_argument('--period', default=5000, type=int)
     parser.add_argument('--debug', dest='debug', action='store_true')
     parser.add_argument('--seed', default=-1, type=int)
     parser.add_argument('--render', dest='render', action='store_true')
@@ -302,6 +302,7 @@ if __name__ == "__main__":
 
     # training
     total_steps = 0
+    step_cpt = 0
     df = pd.DataFrame(columns=["total_steps", "average_score",
                                "average_score_rl", "average_score_ea", "best_score"])
     while total_steps < args.max_steps:
@@ -317,7 +318,6 @@ if __name__ == "__main__":
             actor_ea.set_params(actor_params)
             f, steps = evaluate(actor_ea, env, memory=memory, n_episodes=args.n_episodes,
                                 render=args.render)
-            total_steps += steps
             actor_steps += steps
             fitness_ea.append(f)
 
@@ -330,7 +330,6 @@ if __name__ == "__main__":
             # evaluate
             f, steps = evaluate(actors[i], env, memory=memory, n_episodes=args.n_episodes,
                                 render=False, noise=a_noise)
-            total_steps += steps
             actor_steps += steps
 
             # print scores
@@ -354,20 +353,16 @@ if __name__ == "__main__":
                 # evaluate
                 f, steps = evaluate(actors[i], env, memory=memory, n_episodes=args.n_episodes,
                                     render=False)
-                total_steps += steps
+                actor_steps += steps
                 fitness_rl.append(f)
                 rl_params.append(actors[i].get_params())
 
                 # print scores
                 prGreen('RL actor fitness:{}'.format(f))
 
-            idx_sorted = np.argsort(np.array(fitness_rl))
-            rl_params = np.array(rl_params)
-            mu = weights @ rl_params[idx_sorted]
-            actor_ea.set_params(mu)
-            f, _ = evaluate(actor_ea, env, memory=None, n_episodes=args.n_episodes,
-                            render=False)
-            prRed('RL mean actor fitness:{}'.format(f))
+        # update step counts
+        total_steps += actor_steps
+        step_cpt += actor_steps
 
         # combine rl and ea and update ea
         fitness = np.array(fitness_ea + fitness_rl)
@@ -375,25 +370,27 @@ if __name__ == "__main__":
             (ea_params, rl_params), axis=0)
         es.tell(params, fitness)
 
-        idx_sorted = np.argsort(np.array(fitness))
-        mu = weights @ params[idx_sorted[-args.n_grad:]]
-        actor_ea.set_params(mu)
-        f, _ = evaluate(actor_ea, env, memory=None, n_episodes=args.n_episodes,
-                        render=False)
-        prRed('EA mean actor fitness:{}'.format(f))
-
         # save stuff
-        df.to_pickle(args.output + "/log.pkl")
-        res = {"total_steps": total_steps,
-               "average_score_ea": np.mean(fitness_ea),
-               "average_score_rl": np.mean(fitness_rl),
-               "average_score": np.mean(fitness),
-               "best_score": np.max(fitness)}
-        # for i in range(args.n_grad):
-        #     res["score_rl_{}".format(i)] = fitness_rl[i]
-        # for i in range(args.pop_size):
-        #     res["score_ea_{}".format(i)] = fitness_ea[i]
-        print(res)
-        df = df.append(res, ignore_index=True)
+        if step_cpt >= args.period:
+
+            df.to_pickle(args.output + "/log.pkl")
+            res = {"total_steps": total_steps,
+                   "average_score_ea": np.mean(fitness_ea),
+                   "average_score_rl": np.mean(fitness_rl),
+                   "average_score": np.mean(fitness),
+                   "best_score": np.max(fitness)}
+            os.makedirs(args.output + "/{}_steps".format(total_steps),
+                        exist_ok=True)
+            critic.save_model(
+                args.output + "/{}_steps".format(total_steps), "critic")
+            for i in range(args.n_grad):
+                actors[i].save_model(
+                    args.output + "/{}_steps".format(total_steps), "actor_{}".format(i))
+            actor_ea.set_params(es.mu)
+            actor_ea.save_model(
+                args.output + "/{}_steps".format(total_steps), "actor_mu")
+            df = df.append(res, ignore_index=True)
+            step_cpt = 0
+            print(res)
 
         print("Total steps", total_steps)
