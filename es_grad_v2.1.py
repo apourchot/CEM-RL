@@ -321,6 +321,8 @@ if __name__ == "__main__":
                 # set params
                 actor.set_params(ea_params[i])
                 actor_t.set_params(ea_params[i])
+                actor.optimizer = torch.optim.Adam(actor.parameters(), lr=args.actor_lr)
+
 
                 # actor update
                 for _ in range(actor_steps):

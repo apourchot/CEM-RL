@@ -231,7 +231,7 @@ if __name__ == "__main__":
 
     # ES parameters
     parser.add_argument('--pop_size', default=10, type=int)
-    parser.add_argument('--n_grad', default=1, type=int)
+    parser.add_argument('--n_grad', default=5, type=int)
     parser.add_argument('--sigma_init', default=0.05, type=float)
     parser.add_argument('--damp', default=0.001, type=float)
 
@@ -313,12 +313,12 @@ if __name__ == "__main__":
             for i in range(args.n_grad):
 
                 # actor update
-                for _ in range(1):  # actor_steps):
+                for _ in range(actor_steps):
                     actors[i].update(memory, args.batch_size,
                                      critic, actors_t[i])
 
                 # critic update
-                for _ in range(1):  # actor_steps // args.n_grad):
+                for _ in range(actor_steps // args.n_grad):
                     critic.update(memory, args.batch_size, actors[i], critic_t)
 
                 # evaluate
@@ -328,8 +328,8 @@ if __name__ == "__main__":
                 rl_params.append(actors[i].get_params())
                 fitness_rl.append(f)
 
-            # print scores
-            prRed('RL actor fitness:{}'.format(f))
+                # print scores
+                prRed('RL actor fitness:{}'.format(f))
 
         # evaluate all actors
         actor_steps = 0
