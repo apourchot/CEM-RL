@@ -218,6 +218,7 @@ class D3PG(object):
         self.tau = args.tau
         self.discount = args.discount
         self.batch_size = args.batch_size
+        self.reward_scale = args.reward_scale
 
     def train(self, iterations, actor_index):
 
@@ -231,7 +232,8 @@ class D3PG(object):
             with torch.no_grad():
                 target_Q = self.critic_target(
                     n_states, self.actors_target[actor_index](n_states))
-                target_Q = rewards + (1 - dones) * self.discount * target_Q
+                target_Q = self.reward_scale * rewards + \
+                    (1 - dones) * self.discount * target_Q
 
             # Get current Q estimate
             current_Q = self.critic(states, actions)

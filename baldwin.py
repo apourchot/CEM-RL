@@ -13,7 +13,7 @@ import gym.spaces
 import numpy as np
 from tqdm import tqdm
 
-from ES import sepCMAES, sepCEM
+from ES import sepCMAES
 from models import RLNN
 from random_process import GaussianNoise
 from memory import Memory
@@ -93,7 +93,7 @@ def evaluate(actor, env, memory=None, n_episodes=1, random=False, noise=None, re
             if noise is not None:
                 action += noise.sample()
 
-            return np.clip(action, -max_action, max_action)
+            return np.clip(action, -1, 1)
 
     else:
         def policy(state):
@@ -231,11 +231,12 @@ if __name__ == "__main__":
 
     # ES parameters
     parser.add_argument('--pop_size', default=10, type=int)
-    parser.add_argument('--n_grad', default=5, type=int)
+    parser.add_argument('--n_grad', default=1, type=int)
+    parser.add_argument('--n_steps', default=1000, type=int)
     parser.add_argument('--sigma_init', default=0.05, type=float)
-    parser.add_argument('--damp', default=0.001, type=float)
 
     # Training parameters
+    parser.add_argument('--n_actor', default=1, type=int)
     parser.add_argument('--n_episodes', default=1, type=int)
     parser.add_argument('--max_steps', default=1000000, type=int)
     parser.add_argument('--mem_size', default=1000000, type=int)
@@ -246,7 +247,6 @@ if __name__ == "__main__":
 
     # misc
     parser.add_argument('--output', default='results', type=str)
-    parser.add_argument('--period', default=5000, type=int)
     parser.add_argument('--debug', dest='debug', action='store_true')
     parser.add_argument('--seed', default=-1, type=int)
     parser.add_argument('--render', dest='render', action='store_true')
@@ -269,112 +269,74 @@ if __name__ == "__main__":
     # critic
     critic = Critic(state_dim, action_dim, max_action, args)
     # critic.load_model(
-    #     "results/ddpg_layer/hc/HalfCheetah-v2-run1/1000000_steps", "critic")
+    #     "results/ddpg_5/hc/HalfCheetah-v2-run1/1000000_steps", "critic")
     critic_t = Critic(state_dim, action_dim, max_action, args)
     critic_t.load_state_dict(critic.state_dict())
 
     # actor
-    actors = [Actor(state_dim, action_dim, max_action, args)
-              for _ in range(args.n_grad)]
-    actors_t = [Actor(state_dim, action_dim, max_action, args)
-                for _ in range(args.n_grad)]
-    actor_ea = Actor(state_dim, action_dim, max_action, args)
-    for i in range(args.n_grad):
-        actors_t[i].load_state_dict(actors[i].state_dict())
-    a_noise = GaussianNoise(action_dim, sigma=args.gauss_sigma)
+    actor = Actor(state_dim, action_dim, max_action, args)
+    actor_t = Actor(state_dim, action_dim, max_action, args)
+    actor_t.load_state_dict(actor.state_dict())
 
     if USE_CUDA:
         critic.cuda()
         critic_t.cuda()
-        for i in range(args.n_grad):
-            actors[i].cuda()
-            actors_t[i].cuda()
+        actor.cuda()
+        actor_t.cuda()
 
-    # CEM
-    es = sepCEM(actor_ea.get_size(), mu_init=actor_ea.get_params(), sigma_init=args.sigma_init, damp=args.damp,
-                pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.n_grad)
+    # es
+    # es = cma.CMAEvolutionStrategy(
+    #     np.zeros(actor.get_params().shape), args.sigma_init, inopts={"CMA_diagonal": True, "popsize": args.pop_size})
+
+    es = sepCMAES(actor.get_size(), sigma_init=args.sigma_init,
+                  pop_size=args.pop_size, antithetic=True)
 
     # training
     total_steps = 0
-    actor_steps = 0
-    step_cpt = 0
-    df = pd.DataFrame(columns=["total_steps", "average_score",
-                               "average_score_rl", "average_score_ea", "best_score"])
+    df = pd.DataFrame(columns=["total_steps", "average_score", "best_score"])
+
     while total_steps < args.max_steps:
 
-        fitness_rl = []
-        fitness_ea = []
-        rl_params = []
-        ea_params = es.ask(args.pop_size)
-
-        # udpate the rl actors and the critic
-        if total_steps > args.start_steps:
-
-            for i in range(args.n_grad):
-
-                # actor update
-                for _ in range(actor_steps):
-                    actors[i].update(memory, args.batch_size,
-                                     critic, actors_t[i])
-
-                # critic update
-                for _ in range(actor_steps // args.n_grad):
-                    critic.update(memory, args.batch_size, actors[i], critic_t)
-
-                # evaluate
-                f, steps = evaluate(actors[i], env, memory=memory, n_episodes=args.n_episodes,
-                                    render=args.render)
-                actor_steps += steps
-                rl_params.append(actors[i].get_params())
-                fitness_rl.append(f)
-
-                # print scores
-                prRed('RL actor fitness:{}'.format(f))
-
-        # evaluate all actors
+        actors_params = es.ask(args.pop_size)
         actor_steps = 0
-        for params in ea_params:
+        fitness = []
 
-            actor_ea.set_params(params)
-            f, steps = evaluate(actor_ea, env, memory=memory, n_episodes=args.n_episodes,
-                                render=args.render)
+        for i in range(args.pop_size):
+
+            actor.set_params(actors_params[i])
+            actor.optimizer = torch.optim.Adam(
+                actor.parameters(), lr=args.actor_lr)
+
+            # do some gradient descent steps
+            if total_steps >= args.start_steps:
+                for _ in range(args.n_steps):
+                    actor.update(memory, args.batch_size, critic, actor_t)
+
+            # evaluate before
+            f, steps = evaluate(actor, env, memory=memory, n_episodes=args.n_episodes,
+                                render=False, random=total_steps <= args.start_steps)
+            fitness.append(f)
+            total_steps += steps
             actor_steps += steps
-            fitness_ea.append(f)
 
             # print scores
-            prLightPurple('EA actor fitness:{}'.format(f))
+            prGreen('EA actor fitness:{}'.format(f))
 
-        # update step counts
-        total_steps += actor_steps
-        step_cpt += actor_steps
+        # update critic
+        for _ in tqdm(range(actor_steps)):
+            critic.update(memory, args.batch_size, actor_t, critic_t)
 
-        # combine rl and ea and update ea
-        fitness = np.array(fitness_ea + fitness_rl)
-        params = ea_params if len(rl_params) == 0 else np.concatenate(
-            (ea_params, rl_params), axis=0)
-        es.tell(params, fitness)
+        # update es and agent
+        es.tell(actors_params, fitness)
 
         # save stuff
-        if step_cpt >= args.period:
-
-            df.to_pickle(args.output + "/log.pkl")
-            res = {"total_steps": total_steps,
-                   "average_score_ea": np.mean(fitness_ea),
-                   "average_score_rl": np.mean(fitness_rl),
-                   "average_score": np.mean(fitness),
-                   "best_score": np.max(fitness)}
-            os.makedirs(args.output + "/{}_steps".format(total_steps),
-                        exist_ok=True)
-            critic.save_model(
-                args.output + "/{}_steps".format(total_steps), "critic")
-            for i in range(args.n_grad):
-                actors[i].save_model(
-                    args.output + "/{}_steps".format(total_steps), "actor_{}".format(i))
-            actor_ea.set_params(es.mu)
-            actor_ea.save_model(
-                args.output + "/{}_steps".format(total_steps), "actor_mu")
-            df = df.append(res, ignore_index=True)
-            step_cpt = 0
-            print(res)
+        best_score = f
+        res = {"total_steps": total_steps,
+               "average_score": np.mean(fitness),
+               "best_score": np.max(fitness)}
+        for i in range(args.pop_size):
+            res["score_{}".format(i)] = fitness[i]
+        df = df.append(res, ignore_index=True)
+        df.to_pickle(args.output + "/log.pkl")
 
         print("Total steps", total_steps)

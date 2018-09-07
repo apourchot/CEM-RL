@@ -100,7 +100,7 @@ class GA:
 
         return deepcopy(self.individuals)
 
-    def tell(self, scores, solutions):
+    def tell(self, solutions, scores):
         """
         Updates the population
         """

@@ -13,7 +13,7 @@ import gym.spaces
 import numpy as np
 from tqdm import tqdm
 
-from ES import sepCMAES, sepCEM
+from ES import sepCMAES, sepCEM, sepMCEM
 from models import RLNN
 from random_process import GaussianNoise
 from memory import Memory
@@ -50,13 +50,13 @@ class Actor(RLNN):
     def forward(self, x):
 
         if not self.layer_norm:
-            x = F.relu(self.l1(x))
-            x = F.relu(self.l2(x))
+            x = F.leaky_relu(self.l1(x))
+            x = F.leaky_relu(self.l2(x))
             x = self.max_action * F.tanh(self.l3(x))
 
         else:
-            x = F.relu(self.n1(self.l1(x)))
-            x = F.relu(self.n2(self.l2(x)))
+            x = F.leaky_relu(self.n1(self.l1(x)))
+            x = F.leaky_relu(self.n2(self.l2(x)))
             x = self.max_action * F.tanh(self.l3(x))
 
         return x
@@ -231,14 +231,12 @@ if __name__ == "__main__":
 
     # ES parameters
     parser.add_argument('--pop_size', default=10, type=int)
-    parser.add_argument('--parents', default=-1, type=int)
     parser.add_argument('--n_grad', default=1, type=int)
-    parser.add_argument('--lf', default=1, type=float)
     parser.add_argument('--sigma_init', default=0.05, type=float)
     parser.add_argument('--damp', default=0.001, type=float)
+    parser.add_argument('--mult_noise', dest='mult_noise', action='store_true')
 
     # Training parameters
-    parser.add_argument('--n_actor', default=1, type=int)
     parser.add_argument('--n_episodes', default=1, type=int)
     parser.add_argument('--max_steps', default=1000000, type=int)
     parser.add_argument('--mem_size', default=1000000, type=int)
@@ -249,6 +247,7 @@ if __name__ == "__main__":
 
     # misc
     parser.add_argument('--output', default='results', type=str)
+    parser.add_argument('--period', default=5000, type=int)
     parser.add_argument('--debug', dest='debug', action='store_true')
     parser.add_argument('--seed', default=-1, type=int)
     parser.add_argument('--render', dest='render', action='store_true')
@@ -271,7 +270,7 @@ if __name__ == "__main__":
     # critic
     critic = Critic(state_dim, action_dim, max_action, args)
     # critic.load_model(
-    #     "results/ddpg_5/hc/HalfCheetah-v2-run1/1000000_steps", "critic")
+    #     "results/ddpg_layer/hc/HalfCheetah-v2-run1/1000000_steps", "critic")
     critic_t = Critic(state_dim, action_dim, max_action, args)
     critic_t.load_state_dict(critic.state_dict())
 
@@ -279,6 +278,7 @@ if __name__ == "__main__":
     actor = Actor(state_dim, action_dim, max_action, args)
     actor_t = Actor(state_dim, action_dim, max_action, args)
     actor_t.load_state_dict(actor.state_dict())
+    a_noise = GaussianNoise(action_dim, sigma=args.gauss_sigma)
 
     if USE_CUDA:
         critic.cuda()
@@ -286,86 +286,100 @@ if __name__ == "__main__":
         actor.cuda()
         actor_t.cuda()
 
-    # es
-    # es = cma.CMAEvolutionStrategy(
-    #     np.zeros(actor.get_params().shape), args.sigma_init, inopts={"CMA_diagonal": True, "popsize": args.pop_size})
-
-    if args.parents < 0:
-        args.parents = args.pop_size // 2
-    es = sepCEM(actor.get_size(), sigma_init=args.sigma_init, damp=args.damp,
-                pop_size=args.pop_size, antithetic=True, parents=args.parents)
+    # CEM
+    if args.mult_noise:
+        es = sepMCEM(actor.get_size(), mu_init=actor.get_params(), sigma_init=args.sigma_init, damp=args.damp,
+                     pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.n_grad)
+    else:
+        es = sepCEM(actor.get_size(), mu_init=actor.get_params(), sigma_init=args.sigma_init, damp=args.damp,
+                    pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.n_grad)
 
     # training
+    step_cpt = 0
     total_steps = 0
-    df = pd.DataFrame(
-        columns=["total_steps", "average_score", "average_score_half", "best_score"])
-
+    actor_steps = 0
+    df = pd.DataFrame(columns=["total_steps", "average_score",
+                               "average_score_rl", "average_score_ea", "best_score"])
     while total_steps < args.max_steps:
 
-        actors_params = es.ask(args.pop_size)
         fitness = []
+        fitness_ = []
+        ea_params = es.ask(args.pop_size)
 
-        # udpate some actors
-        fs_b = [None for _ in range(args.pop_size)]
+        # evaluate rl actors before update
+        for i in range(args.n_grad):
 
+            # evaluate
+            actor.set_params(ea_params[i])
+            f, steps = evaluate(actor, env, memory=None, n_episodes=args.n_episodes,
+                                render=False, noise=None)
+            fitness_.append(f)
+
+            # print scores
+            prCyan('EA actor fitness before:{}'.format(f))
+
+        # udpate the rl actors and the critic
         if total_steps > args.start_steps:
 
             for i in range(args.n_grad):
 
-                actor.set_params(actors_params[i])
+                # set params
+                actor.set_params(ea_params[i])
+                actor_t.set_params(ea_params[i])
                 actor.optimizer = torch.optim.Adam(
                     actor.parameters(), lr=args.actor_lr)
 
-                # evaluate before
-                f, steps = evaluate(actor, env, memory=None, n_episodes=args.n_episodes,
-                                    render=False)
-                fs_b[i] = f
+                # actor update
+                for _ in range(actor_steps):
+                    actor.update(memory, args.batch_size,
+                                 critic, actor_t)
 
-                # do some gradient descent steps
-                for _ in range(int(args.lf * steps)):
-                    actor.update(memory, args.batch_size, critic, actor_t)
+                # critic updatee
+                for _ in range(actor_steps // args.n_grad):
+                    critic.update(memory, args.batch_size, actor, critic_t)
 
-                # set new parameters
-                actors_params[i] = actor.get_params()
-
-                # print scores
-                prGreen('EA actor fitness before:{}'.format(f))
+                # get the params back in the population
+                ea_params[i] = actor.get_params()
 
         # evaluate all actors
         actor_steps = 0
-        fs = []
-        for actor_params in actors_params:
+        for params in ea_params:
 
-            actor.set_params(actor_params)
+            actor.set_params(params)
             f, steps = evaluate(actor, env, memory=memory, n_episodes=args.n_episodes,
                                 render=args.render)
             actor_steps += steps
-            fs.append(f)
-            # / ! \ signe
-            fitness.append(-f)
+            fitness.append(f)
 
             # print scores
-            prLightPurple('EA actor fitness after:{}'.format(f))
+            prLightPurple('EA actor fitness:{}'.format(f))
 
-        # update critic
-        # for _ in tqdm(range(actor_steps)):
-        #     critic.update(memory, args.batch_size, actor_t, critic_t)
+        # update ea
+        es.tell(ea_params, fitness)
 
-        # update es and agent
-        es.tell(actors_params, fitness)
-        # save stuff
-        df.to_pickle(args.output + "/log.pkl")
-
-        # saving scores
+        # update step counts
         total_steps += actor_steps
-        res = {"total_steps": total_steps,
-               "average_score": np.mean(fs),
-               "average_score_half": np.mean(np.partition(fs, args.pop_size // 2 - 1)[args.pop_size // 2:]),
-               "best_score": np.max(fs)}
-        print(res)
-        for i in range(args.pop_size):
-            res["score_before_{}".format(i)] = fs_b[i]
-            res["score_after_{}".format(i)] = fs[i]
-        df = df.append(res, ignore_index=True)
+        step_cpt += actor_steps
+
+        # save stuff
+        if step_cpt >= args.period:
+
+            df.to_pickle(args.output + "/log.pkl")
+            res = {"total_steps": total_steps,
+                   "average_score": np.mean(fitness),
+                   "average_score_half": np.mean(np.partition(fitness, args.n_grad - 1)[args.n_grad:]),
+                   "average_score_rl": np.mean(fitness[:args.n_grad]),
+                   "best_score": np.max(fitness)}
+
+            os.makedirs(args.output + "/{}_steps".format(total_steps),
+                        exist_ok=True)
+            critic.save_model(
+                args.output + "/{}_steps".format(total_steps), "critic")
+            actor.set_params(es.mu)
+            actor.save_model(
+                args.output + "/{}_steps".format(total_steps), "actor_mu")
+            df = df.append(res, ignore_index=True)
+            step_cpt = 0
+            print(res)
 
         print("Total steps", total_steps)

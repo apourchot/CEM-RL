@@ -38,23 +38,6 @@ class RLNN(nn.Module):
                     params[cpt:cpt + tmp]).view(param.size()))
             cpt += tmp
 
-    def train_actor(self, critic, memory, batch_size):
-        """
-        Computes gradient of actor wrt given critic
-        """
-
-        # Sample replay buffer
-        x, _, _, _, _ = memory.sample(batch_size)
-        state = FloatTensor(x)
-
-        # Compute actor loss
-        actor_loss = -critic(state, self.forward(state)).mean()
-
-        # Optimize the actor
-        actor_loss.backward()
-
-        return self.get_grads()
-
     def get_params(self):
         """
         Returns parameters of the actor
@@ -82,7 +65,8 @@ class RLNN(nn.Module):
             return
 
         self.load_state_dict(
-            torch.load('{}/{}.pkl'.format(filename, net_name))
+            torch.load('{}/{}.pkl'.format(filename, net_name),
+                       map_location=lambda storage, loc: storage)
         )
 
     def save_model(self, output, net_name):

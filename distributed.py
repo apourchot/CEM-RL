@@ -98,7 +98,7 @@ def train(n_episodes, output=None, debug=False, render=False):
         # training all agents
         for i in range(args.n_actor):
             f, s = evaluate(agent.actors[i], envs[i], n_episodes=n_episodes,
-                            noise=a_noise, random=random, memory=memory)
+                            noise=None, random=random, memory=memory)
             steps.append(s)
             total_steps += s
             step_cpt += s
@@ -137,8 +137,8 @@ def train(n_episodes, output=None, debug=False, render=False):
 
         # printing iteration resume
         if debug:
-            prPurple('Iteration#{}: Total steps:{}, Best score:{} \n'.format(
-                n, total_steps, np.max(fs)))
+            prPurple('Iteration#{}: Total steps:{} \n'.format(
+                n, total_steps))
 
 
 if __name__ == "__main__":
@@ -231,6 +231,10 @@ if __name__ == "__main__":
         agent = DTD3(state_dim, action_dim, max_action, memory, args)
     else:
         agent = D3PG(state_dim, action_dim, max_action, memory, args)
+        # agent.critic.load_model(
+        #     "./results/ddpg_5/hc/HalfCheetah-v2-run1/1000000_steps", "critic")
+        #  agent.critic_target.load_model(
+        #     "./results/ddpg_5/hc/HalfCheetah-v2-run1/1000000_steps", "critic")
 
     if args.mode == 'train':
         train(n_episodes=args.n_episodes,
