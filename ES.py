@@ -479,7 +479,7 @@ class sepMCEM:
 
         z = (solutions[idx_sorted[:self.parents]] - old_mu)
         self.cov = 1 / self.parents * \
-            self.weights @ (z * z) + self.damp * np.ones(self.num_params)s
+            self.weights @ (z * z) + self.damp * np.ones(self.num_params)
 
     def get_distrib_params(self):
         """
