@@ -445,7 +445,7 @@ class sepMCEM:
         self.antithetic = antithetic
         if self.antithetic:
             assert (self.pop_size % 2 == 0), "Population size must be even"
-        if parents is None:
+        if parents is None or parents <= 0:
             self.parents = pop_size // 2
         else:
             self.parents = parents
