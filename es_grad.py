@@ -325,6 +325,7 @@ if __name__ == "__main__":
 
     # ES parameters
     parser.add_argument('--pop_size', default=10, type=int)
+    parser.add_argument('--elitism', dest="elitism",  action='store_true')
     parser.add_argument('--n_grad', default=1, type=int)
     parser.add_argument('--sigma_init', default=0.05, type=float)
     parser.add_argument('--damp', default=0.001, type=float)
@@ -394,7 +395,7 @@ if __name__ == "__main__":
                      pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.n_grad)
     else:
         es = sepCEM(actor.get_size(), mu_init=actor.get_params(), sigma_init=args.sigma_init, damp=args.damp,
-                    pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.n_grad)
+                    pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.n_grad, elitism=args.elitism)
 
     # training
     step_cpt = 0

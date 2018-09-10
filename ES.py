@@ -343,7 +343,8 @@ class sepCEM:
                  pop_size=256,
                  damp=0.01,
                  parents=None,
-                 antithetic=False):
+                 elitism=False,
+                 antithetic=False,):
 
         # misc
         self.num_params = num_params
@@ -356,15 +357,21 @@ class sepCEM:
         self.sigma = sigma_init
         self.damp = sigma_init
         self.damp_limit = damp
-        self.tau = 0.9
+        self.tau = 0.95
         self.cov = self.sigma * np.ones(self.num_params)
+
+        # elite stuff
+        self.elitism = elitism
+        self.elite = np.sqrt(self.sigma) * np.random.rand(self.num_params)
+        self.elite_score = None
 
         # sampling stuff
         self.pop_size = pop_size
         self.antithetic = antithetic
+
         if self.antithetic:
             assert (self.pop_size % 2 == 0), "Population size must be even"
-        if parents is None:
+        if parents is None or parents <= 0:
             self.parents = pop_size // 2
         else:
             self.parents = parents
@@ -383,10 +390,13 @@ class sepCEM:
         else:
             epsilon = np.random.randn(pop_size, self.num_params)
 
-        print(self.mu)
-        print(self.cov)
+        inds = self.mu + epsilon * np.sqrt(self.cov)
+        if self.elitism:
+            inds[-1] = self.elite
+
         print(self.damp)
-        return self.mu + epsilon * np.sqrt(self.cov)
+
+        return inds
 
     def tell(self, solutions, scores):
         """
@@ -403,6 +413,11 @@ class sepCEM:
         z = (solutions[idx_sorted[:self.parents]] - old_mu)
         self.cov = 1 / self.parents * \
             self.weights @ (z * z) + self.damp * np.ones(self.num_params)
+
+        self.elite = solutions[idx_sorted[0]]
+        self.elite_score = scores[idx_sorted[0]]
+
+        print("Elite score", -self.elite_score)
 
     def get_distrib_params(self):
         """
