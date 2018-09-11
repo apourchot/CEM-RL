@@ -231,6 +231,7 @@ if __name__ == "__main__":
 
     # ES parameters
     parser.add_argument('--pop_size', default=10, type=int)
+    parser.add_argument('--elitism', dest="elitism", action='store_true')
     parser.add_argument('--n_grad', default=5, type=int)
     parser.add_argument('--sigma_init', default=0.05, type=float)
     parser.add_argument('--damp', default=0.001, type=float)
@@ -274,12 +275,13 @@ if __name__ == "__main__":
     critic_t.load_state_dict(critic.state_dict())
 
     # actor
+    actor_ea = Actor(state_dim, action_dim, max_action, args)
     actors = [Actor(state_dim, action_dim, max_action, args)
               for _ in range(args.n_grad)]
     actors_t = [Actor(state_dim, action_dim, max_action, args)
                 for _ in range(args.n_grad)]
-    actor_ea = Actor(state_dim, action_dim, max_action, args)
     for i in range(args.n_grad):
+        actors[i].set_params(actor_ea.get_params())
         actors_t[i].load_state_dict(actors[i].state_dict())
     a_noise = GaussianNoise(action_dim, sigma=args.gauss_sigma)
 
@@ -292,7 +294,7 @@ if __name__ == "__main__":
 
     # CEM
     es = sepCEM(actor_ea.get_size(), mu_init=actor_ea.get_params(), sigma_init=args.sigma_init, damp=args.damp,
-                pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.n_grad)
+                pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.pop_size // 2,  elitism=args.elitism)
 
     # training
     total_steps = 0
@@ -302,9 +304,7 @@ if __name__ == "__main__":
                                "average_score_rl", "average_score_ea", "best_score"])
     while total_steps < args.max_steps:
 
-        fitness_rl = []
-        fitness_ea = []
-        rl_params = []
+        fitness = []
         ea_params = es.ask(args.pop_size)
 
         # udpate the rl actors and the critic
@@ -313,7 +313,7 @@ if __name__ == "__main__":
             for i in range(args.n_grad):
 
                 # actor update
-                for _ in range(actor_steps):
+                for _ in range(actor_steps // args.pop_size):
                     actors[i].update(memory, args.batch_size,
                                      critic, actors_t[i])
 
@@ -322,14 +322,7 @@ if __name__ == "__main__":
                     critic.update(memory, args.batch_size, actors[i], critic_t)
 
                 # evaluate
-                f, steps = evaluate(actors[i], env, memory=memory, n_episodes=args.n_episodes,
-                                    render=args.render)
-                actor_steps += steps
-                rl_params.append(actors[i].get_params())
-                fitness_rl.append(f)
-
-                # print scores
-                prRed('RL actor fitness:{}'.format(f))
+                ea_params[i] = actors[i].get_params()
 
         # evaluate all actors
         actor_steps = 0
@@ -339,28 +332,25 @@ if __name__ == "__main__":
             f, steps = evaluate(actor_ea, env, memory=memory, n_episodes=args.n_episodes,
                                 render=args.render)
             actor_steps += steps
-            fitness_ea.append(f)
+            fitness.append(f)
 
             # print scores
-            prLightPurple('EA actor fitness:{}'.format(f))
+            prLightPurple('Actor fitness:{}'.format(f))
+
+        # update ea
+        es.tell(ea_params, fitness)
 
         # update step counts
         total_steps += actor_steps
         step_cpt += actor_steps
-
-        # combine rl and ea and update ea
-        fitness = np.array(fitness_ea + fitness_rl)
-        params = ea_params if len(rl_params) == 0 else np.concatenate(
-            (ea_params, rl_params), axis=0)
-        es.tell(params, fitness)
 
         # save stuff
         if step_cpt >= args.period:
 
             df.to_pickle(args.output + "/log.pkl")
             res = {"total_steps": total_steps,
-                   "average_score_ea": np.mean(fitness_ea),
-                   "average_score_rl": np.mean(fitness_rl),
+                   "average_score_ea": np.mean(fitness[:args.n_grad]),
+                   "average_score_rl": np.mean(fitness[args.n_grad:]),
                    "average_score": np.mean(fitness),
                    "best_score": np.max(fitness)}
             os.makedirs(args.output + "/{}_steps".format(total_steps),

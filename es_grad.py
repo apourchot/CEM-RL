@@ -395,7 +395,7 @@ if __name__ == "__main__":
                      pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.n_grad)
     else:
         es = sepCEM(actor.get_size(), mu_init=actor.get_params(), sigma_init=args.sigma_init, damp=args.damp,
-                    pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.n_grad, elitism=args.elitism)
+                    pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.pop_size // 2, elitism=args.elitism)
 
     # training
     step_cpt = 0
@@ -455,7 +455,7 @@ if __name__ == "__main__":
             fitness.append(f)
 
             # print scores
-            prLightPurple('EA actor fitness:{}'.format(f))
+            prLightPurple('Actor fitness:{}'.format(f))
 
         # update ea
         es.tell(ea_params, fitness)
