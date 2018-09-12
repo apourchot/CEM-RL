@@ -326,7 +326,7 @@ if __name__ == "__main__":
     # ES parameters
     parser.add_argument('--pop_size', default=10, type=int)
     parser.add_argument('--elitism', dest="elitism",  action='store_true')
-    parser.add_argument('--n_grad', default=1, type=int)
+    parser.add_argument('--n_grad', default=5, type=int)
     parser.add_argument('--sigma_init', default=0.05, type=float)
     parser.add_argument('--damp', default=0.001, type=float)
     parser.add_argument('--mult_noise', dest='mult_noise', action='store_true')
@@ -335,6 +335,7 @@ if __name__ == "__main__":
     parser.add_argument('--n_episodes', default=1, type=int)
     parser.add_argument('--max_steps', default=1000000, type=int)
     parser.add_argument('--mem_size', default=1000000, type=int)
+    parser.add_argument('--n_noisy', default=0, type=int)
 
     # Testing parameters
     parser.add_argument('--filename', default="", type=str)
@@ -409,18 +410,6 @@ if __name__ == "__main__":
         fitness_ = []
         ea_params = es.ask(args.pop_size)
 
-        # evaluate rl actors before update
-        for i in range(args.n_grad):
-
-            # evaluate
-            actor.set_params(ea_params[i])
-            f, steps = evaluate(actor, env, memory=None, n_episodes=args.n_episodes,
-                                render=False, noise=None)
-            fitness_.append(f)
-
-            # print scores
-            prCyan('EA actor fitness before:{}'.format(f))
-
         # udpate the rl actors and the critic
         if total_steps > args.start_steps:
 
@@ -432,20 +421,29 @@ if __name__ == "__main__":
                 actor.optimizer = torch.optim.Adam(
                     actor.parameters(), lr=args.actor_lr)
 
+                # critic update
+                for _ in tqdm(range(actor_steps // args.n_grad)):
+                    critic.update(memory, args.batch_size, actor, critic_t)
+
                 # actor update
                 for _ in tqdm(range(actor_steps)):
                     actor.update(memory, args.batch_size,
                                  critic, actor_t)
 
-                # critic updatee
-                for _ in tqdm(range(actor_steps // args.n_grad)):
-                    critic.update(memory, args.batch_size, actor, critic_t)
-
                 # get the params back in the population
                 ea_params[i] = actor.get_params()
+        actor_steps = 0
+
+        # evaluate noisy actor(s)
+        rands = np.random.choice(args.pop_size, args.n_noisy)
+        for rand in rands:
+            actor.set_params(ea_params[rand])
+            f, steps = evaluate(actor, env, memory=memory, n_episodes=args.n_episodes,
+                                render=args.render, noise=a_noise)
+            actor_steps += steps
+            prCyan('Noisy actor {} fitness:{}'.format(rand, f))
 
         # evaluate all actors
-        actor_steps = 0
         for params in ea_params:
 
             actor.set_params(params)
