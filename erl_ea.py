@@ -455,9 +455,9 @@ if __name__ == "__main__":
             res = {"total_steps": total_steps,
                    "average_score": np.mean(fitness),
                    "average_score_half": np.mean(np.partition(fitness, args.pop_size // 2 - 1)[args.pop_size // 2:]),
-                   "average_score_rl": np.mean(fitness[-1]),
-                   "average_score_ea": np.mean(fitness[:-1]),
-                   "best_score": np.max(fitness)}
+                   "average_score_rl": np.mean(f),
+                   "average_score_ea": np.mean(fitness),
+                   "best_score": max(f, np.max(fitness))}
 
             os.makedirs(args.output + "/{}_steps".format(total_steps),
                         exist_ok=True)
