@@ -22,11 +22,7 @@ class GA:
         self.n_elites = int(self.pop_size * elite_frac)
 
         # individuals
-        if generator is None:
-            self.individuals = [np.random.normal(
-                scale=0.1, size=(pop_size, num_params))]
-        else:
-            self.individuals = np.array([generator() for i in range(pop_size)])
+        self.individuals = np.array([generator() for i in range(pop_size)])
         self.fitness = np.zeros(pop_size)
         self.order = np.zeros(self.pop_size, dtype=np.int64)
         self.to_add = None

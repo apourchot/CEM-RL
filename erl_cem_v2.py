@@ -13,7 +13,7 @@ import gym.spaces
 import numpy as np
 from tqdm import tqdm
 
-from GA import GA
+from ES import sepCMAES, sepCEM, sepMCEM
 from models import RLNN
 from random_process import GaussianNoise
 from memory import Memory
@@ -317,12 +317,12 @@ if __name__ == "__main__":
     # Gaussian noise parameters
     parser.add_argument('--gauss_sigma', default=0.1, type=float)
 
-    # EA parameters
+    # ES parameters
     parser.add_argument('--pop_size', default=10, type=int)
-    parser.add_argument('--elite_frac', default=0.1, type=float)
-    parser.add_argument('--mut_rate', default=0.9, type=float)
-    parser.add_argument('--mut_amp', default=0.1, type=float)
-    parser.add_argument('--omega', default=10, type=int)
+    parser.add_argument('--elitism', dest="elitism",  action='store_true')
+    parser.add_argument('--sigma_init', default=0.05, type=float)
+    parser.add_argument('--damp', default=0.001, type=float)
+    parser.add_argument('--mult_noise', dest='mult_noise', action='store_true')
 
     # Training parameters
     parser.add_argument('--n_episodes', default=1, type=int)
@@ -367,7 +367,7 @@ if __name__ == "__main__":
         critic_t.load_state_dict(critic.state_dict())
 
     # actor
-    actor_ea = Actor(state_dim, action_dim, max_action, args)
+    actor_es = Actor(state_dim, action_dim, max_action, args)
     actor_rl = Actor(state_dim, action_dim, max_action, args)
     actor_rl_t = Actor(state_dim, action_dim, max_action, args)
     actor_rl_t.load_state_dict(actor_rl.state_dict())
@@ -379,35 +379,40 @@ if __name__ == "__main__":
         actor_rl.cuda()
         actor_rl_t.cuda()
 
-    # EA
-    ea = GA(actor_ea.get_size(), pop_size=args.pop_size, mut_amp=args.mut_amp, mut_rate=args.mut_rate,
-            elite_frac=args.elite_frac, generator=lambda: Actor(state_dim, action_dim, max_action, args).get_params())
+    # CEM
+    es = sepCEM(actor_es.get_size(), mu_init=actor_es.get_params(), sigma_init=args.sigma_init, damp=args.damp,
+                pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.pop_size // 2, elitism=args.elitism)
 
     # training
-    it = 1
     step_cpt = 0
     total_steps = 0
     actor_steps = 0
     df = pd.DataFrame(columns=["total_steps", "average_score", "average_score_half",
-                               "average_score_rl", "average_score_ea", "best_score"])
+                               "average_score_rl", "average_score_es", "best_score"])
 
     while total_steps < args.max_steps:
 
         fitness = []
-        ea_params = ea.ask()
+        es_params = es.ask(args.pop_size)
 
         # evaluate the es actors
         actor_steps = 0
-        for params in ea_params:
+        for params in es_params:
 
-            actor_ea.set_params(params)
-            f, steps = evaluate(actor_ea, env, memory=memory, n_episodes=args.n_episodes,
+            actor_es.set_params(params)
+            f, steps = evaluate(actor_es, env, memory=memory, n_episodes=args.n_episodes,
                                 render=args.render)
             actor_steps += steps
             fitness.append(f)
 
             # print scores
-            prLightPurple('EA Actor fitness:{}'.format(f))
+            prLightPurple('ES Actor fitness:{}'.format(f))
+
+        # initialize rl actor
+        actor_rl.set_params(es_params[0])
+        actor_rl_t.set_params(es_params[0])
+        actor_rl.optimizer = torch.optim.Adam(
+            actor_rl.parameters(), lr=args.actor_lr)
 
         # evaluate noisy rl actor
         f, steps = evaluate(actor_rl, env, memory=memory, n_episodes=args.n_episodes,
@@ -429,19 +434,15 @@ if __name__ == "__main__":
             # evaluate rl actor
             f, steps = evaluate(actor_rl, env, memory=None, n_episodes=args.n_episodes,
                                 render=args.render, noise=None)
+            es_params = np.append(es_params, [actor_rl.get_params()], axis=0)
             actor_steps += steps
+            fitness.append(f)
 
             # print score
             prRed('RL Actor fitness:{}'.format(f))
 
-        # update ea
-        ea.tell(ea_params, fitness)
-        it += 1
-
-        # adding agent to population
-        if (it + 1) % args.omega == 0 and args.pop_size > 0 and args.omega > 0:
-            prRed('Transfered RL agent with score {} into pop'.format(f))
-            ea.add(actor_rl.get_params(), f)
+        # update es
+        es.tell(es_params, fitness)
 
         # update step counts
         total_steps += actor_steps
@@ -456,16 +457,16 @@ if __name__ == "__main__":
                    "average_score": np.mean(fitness),
                    "average_score_half": np.mean(np.partition(fitness, args.pop_size // 2 - 1)[args.pop_size // 2:]),
                    "average_score_rl": np.mean(fitness[-1]),
-                   "average_score_ea": np.mean(fitness[:-1]),
+                   "average_score_es": np.mean(fitness[:-1]),
                    "best_score": np.max(fitness)}
 
             os.makedirs(args.output + "/{}_steps".format(total_steps),
                         exist_ok=True)
             critic.save_model(
                 args.output + "/{}_steps".format(total_steps), "critic")
-            actor_ea.set_params(ea.best_actor())
-            actor_ea.save_model(
-                args.output + "/{}_steps".format(total_steps), "actor_ea")
+            actor_es.set_params(es.mu)
+            actor_es.save_model(
+                args.output + "/{}_steps".format(total_steps), "actor_mu")
             df = df.append(res, ignore_index=True)
             step_cpt = 0
             print(res)
