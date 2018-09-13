@@ -511,9 +511,9 @@ if __name__ == "__main__":
             df.to_pickle(args.output + "/log.pkl")
             res = {"total_steps": total_steps,
                    "average_score": np.mean(fitness),
-                   "average_score_half": np.mean(np.partition(fitness, args.pop_size // 2 - 1)[args.pop_size // 2:]),
+                   "average_score_half": np.mean(np.partition(fitness[:args.pop_size], args.pop_size // 2 - 1)[args.pop_size // 2:]),
                    "average_score_rl": np.mean(fitness[:args.n_grad]),
-                   "average_score_ea": np.mean(fitness[args.n_grad:]),
+                   "average_score_ea": np.mean(fitness[args.n_grad:args.pop_size]),
                    "best_score": np.max(fitness),
                    "n_reused": n_r}
 
