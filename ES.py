@@ -344,7 +344,7 @@ class sepCEM:
                  damp=0.01,
                  parents=None,
                  elitism=False,
-                 antithetic=False,):
+                 antithetic=False):
 
         # misc
         self.num_params = num_params
@@ -383,7 +383,7 @@ class sepCEM:
         """
         Returns a list of candidates parameters
         """
-        if self.antithetic:
+        if self.antithetic and not pop_size % 2:
             epsilon_half = np.random.randn(pop_size // 2, self.num_params)
             epsilon = np.concatenate([epsilon_half, - epsilon_half])
 
@@ -393,8 +393,6 @@ class sepCEM:
         inds = self.mu + epsilon * np.sqrt(self.cov)
         if self.elitism:
             inds[-1] = self.elite
-
-        print(self.damp)
 
         return inds
 

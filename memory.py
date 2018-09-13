@@ -143,3 +143,30 @@ class SharedMemory():
     def sample(self, batch_size):
         with self.memory_lock:
             return self._sample(batch_size)
+
+
+class Archive(list):
+
+    def __init__(self):
+
+        # counter
+        self.cpt = 0
+
+    def add_sample(self, sample):
+
+        # adding the sample to the archive
+        self.append(sample)
+        self.cpt += 1
+
+    def add_samples(self, samples):
+
+        # adding the samples to the archive
+        for sample in samples:
+            self.add_sample(sample)
+
+    def add_gen(self, idx, gen):
+
+        self[idx].gens.append(gen)
+
+    def get_size(self):
+        return min(self.max_size, self.cpt)
