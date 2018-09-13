@@ -451,11 +451,11 @@ if __name__ == "__main__":
                     actor.parameters(), lr=args.actor_lr)
 
                 # critic update
-                for _ in tqdm(range(10)):  # actor_steps // args.n_grad)):
+                for _ in tqdm(range(actor_steps // args.n_grad)):
                     critic.update(memory, args.batch_size, actor, critic_t)
 
                 # actor update
-                for _ in tqdm(range(10)):  # actor_steps)):
+                for _ in tqdm(range(actor_steps)):
                     actor.update(memory, args.batch_size,
                                  critic, actor_t)
 
