@@ -408,7 +408,7 @@ if __name__ == "__main__":
 
         fitness = []
         fitness_ = []
-        ea_params = es.ask(args.pop_size)
+        es_params = es.ask(args.pop_size)
 
         # udpate the rl actors and the critic
         if total_steps > args.start_steps:
@@ -416,8 +416,8 @@ if __name__ == "__main__":
             for i in range(args.n_grad):
 
                 # set params
-                actor.set_params(ea_params[i])
-                actor_t.set_params(ea_params[i])
+                actor.set_params(es_params[i])
+                actor_t.set_params(es_params[i])
                 actor.optimizer = torch.optim.Adam(
                     actor.parameters(), lr=args.actor_lr)
 
@@ -431,20 +431,19 @@ if __name__ == "__main__":
                                  critic, actor_t)
 
                 # get the params back in the population
-                ea_params[i] = actor.get_params()
+                es_params[i] = actor.get_params()
         actor_steps = 0
 
         # evaluate noisy actor(s)
-        rands = np.random.choice(args.pop_size, args.n_noisy)
-        for rand in rands:
-            actor.set_params(ea_params[rand])
+        for i in range(args.n_noisy):
+            actor.set_params(es_params[i])
             f, steps = evaluate(actor, env, memory=memory, n_episodes=args.n_episodes,
                                 render=args.render, noise=a_noise)
             actor_steps += steps
-            prCyan('Noisy actor {} fitness:{}'.format(rand, f))
+            prCyan('Noisy actor {} fitness:{}'.format(i, f))
 
         # evaluate all actors
-        for params in ea_params:
+        for params in es_params:
 
             actor.set_params(params)
             f, steps = evaluate(actor, env, memory=memory, n_episodes=args.n_episodes,
@@ -455,8 +454,8 @@ if __name__ == "__main__":
             # print scores
             prLightPurple('Actor fitness:{}'.format(f))
 
-        # update ea
-        es.tell(ea_params, fitness)
+        # update es
+        es.tell(es_params, fitness)
 
         # update step counts
         total_steps += actor_steps

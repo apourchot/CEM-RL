@@ -465,13 +465,12 @@ if __name__ == "__main__":
         actor_steps = 0
 
         # evaluate noisy actor(s)
-        rands = np.random.choice(args.pop_size, args.n_noisy)
-        for rand in rands:
-            actor.set_params(es_params[rand])
+        for i in range(args.n_noisy):
+            actor.set_params(es_params[i])
             f, steps = evaluate(actor, env, memory=memory, n_episodes=args.n_episodes,
                                 render=args.render, noise=a_noise)
             actor_steps += steps
-            prCyan('Noisy actor {} fitness:{}'.format(rand, f))
+            prCyan('Noisy actor {} fitness:{}'.format(i, f))
 
         # evaluate all actors
         for i in range(args.pop_size):
