@@ -20,8 +20,8 @@ class Memory():
         self.memory_size = memory_size
         self.state_dim = state_dim
         self.action_dim = action_dim
-        self.pos = mp.Value('l', 0)
-        self.full = mp.Value('b', False)
+        self.pos = 0
+        self.full = False
 
         if USE_CUDA:
             self.states = torch.zeros(self.memory_size, self.state_dim).cuda()
@@ -40,9 +40,9 @@ class Memory():
             self.dones = torch.zeros(self.memory_size, 1)
 
     def size(self):
-        if self.full.value:
+        if self.full:
             return self.memory_size
-        return self.pos.value
+        return self.pos
 
     # Expects tuples of (state, next_state, action, reward, done)
 
@@ -50,20 +50,20 @@ class Memory():
 
         state, n_state, action, reward, done = datum
 
-        self.states[self.pos.value][:] = FloatTensor(state)
-        self.n_states[self.pos.value][:] = FloatTensor(n_state)
-        self.actions[self.pos.value][:] = FloatTensor(action)
-        self.rewards[self.pos.value][:] = FloatTensor([reward])
-        self.dones[self.pos.value][:] = FloatTensor([done])
+        self.states[self.pos] = FloatTensor(state)
+        self.n_states[self.pos] = FloatTensor(n_state)
+        self.actions[self.pos] = FloatTensor(action)
+        self.rewards[self.pos] = FloatTensor([reward])
+        self.dones[self.pos] = FloatTensor([done])
 
-        self.pos.value += 1
-        if self.pos.value == self.memory_size:
-            self.full.value = True
-            self.pos.value = 0
+        self.pos += 1
+        if self.pos == self.memory_size:
+            self.full = True
+            self.pos = 0
 
     def sample(self, batch_size):
 
-        upper_bound = self.memory_size if self.full.value else self.pos.value
+        upper_bound = self.memory_size if self.full else self.pos
         batch_inds = torch.LongTensor(
             np.random.randint(0, upper_bound, size=batch_size))
 
@@ -72,6 +72,21 @@ class Memory():
                 self.actions[batch_inds],
                 self.rewards[batch_inds],
                 self.dones[batch_inds])
+
+    def repeat(self, start_pos, end_pos):
+
+        for i in range(start_pos, end_pos):
+
+            self.states[self.pos] = self.states[i].clone()
+            self.n_states[self.pos] = self.n_states[i].clone()
+            self.actions[self.pos] = self.actions[i].clone()
+            self.rewards[self.pos] = self.rewards[i].clone()
+            self.dones[self.pos] = self.dones[i].clone()
+
+            self.pos += 1
+            if self.pos == self.memory_size:
+                self.full = True
+                self.pos = 0
 
 
 class SharedMemory():
@@ -113,11 +128,11 @@ class SharedMemory():
 
         state, n_state, action, reward, done = datum
 
-        self.states[self.pos.value][:] = FloatTensor(state)
-        self.n_states[self.pos.value][:] = FloatTensor(n_state)
-        self.actions[self.pos.value][:] = FloatTensor(action)
-        self.rewards[self.pos.value][:] = FloatTensor([reward])
-        self.dones[self.pos.value][:] = FloatTensor([done])
+        self.states[self.pos.value] = FloatTensor(state)
+        self.n_states[self.pos.value] = FloatTensor(n_state)
+        self.actions[self.pos.value] = FloatTensor(action)
+        self.rewards[self.pos.value] = FloatTensor([reward])
+        self.dones[self.pos.value] = FloatTensor([done])
 
         self.pos.value += 1
         if self.pos.value == self.memory_size:
@@ -143,6 +158,23 @@ class SharedMemory():
     def sample(self, batch_size):
         with self.memory_lock:
             return self._sample(batch_size)
+
+    def repeat(self, start_pos, end_pos):
+
+        for i in range(start_pos, end_pos):
+
+            self.states[self.pos.value] = self.states[i].clone()
+            self.n_states[self.pos.value] = self.n_states[i].clone()
+            self.actions[self.pos.value] = self.actions[i].clone()
+            self.rewards[self.pos.value] = self.rewards[i].clone()
+            self.dones[self.pos.value] = self.dones[i].clone()
+
+            self.pos.value += 1
+            if self.pos.value == self.memory_size:
+                self.full.value = True
+                self.pos.value = 0
+
+        print(self.states.size())
 
 
 class Archive(list):

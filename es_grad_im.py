@@ -22,7 +22,8 @@ from samplers import IMSampler
 from util import *
 
 
-Sample = namedtuple('Sample', ('params', 'score', 'gens'))
+Sample = namedtuple('Sample', ('params', 'score',
+                               'gens', 'start_pos', 'end_pos'))
 Theta = namedtuple('Theta', ('mu', 'cov', 'samples'))
 USE_CUDA = torch.cuda.is_available()
 if USE_CUDA:
@@ -340,6 +341,7 @@ if __name__ == "__main__":
     parser.add_argument('--alpha', type=float, default=1)
     parser.add_argument('--epsilon', type=float, default=0)
     parser.add_argument('--k', type=int, default=1)
+    parser.add_argument('--im_buffer', dest='im_buffer', action='store_true')
 
     # Training parameters
     parser.add_argument('--n_episodes', default=1, type=int)
@@ -405,8 +407,7 @@ if __name__ == "__main__":
     thetas_archive = Archive()
     mu, cov = es.get_distrib_params()
     thetas_archive.add_sample(Theta(mu, cov, []))
-    sampler = IMSampler(sample_archive, thetas_archive,
-                        alpha=args.alpha, k=args.k, epsilon=args.epsilon)
+    sampler = IMSampler(sample_archive, thetas_archive,  k=1)
 
     # training
     n_ind = 0
@@ -414,6 +415,7 @@ if __name__ == "__main__":
     curr_gen = 0
     total_steps = 0
     actor_steps = 0
+    reused_steps = 0
     df = pd.DataFrame(columns=["total_steps", "average_score",
                                "average_score_rl", "average_score_ea", "best_score"])
     while total_steps < args.max_steps:
@@ -435,6 +437,14 @@ if __name__ == "__main__":
             # print reused score
             prGreen('Reused actor fitness:{}'.format(f_r[i]))
 
+            # duplicating samples in buffer
+            if args.im_buffer:
+                sample_r = sample_archive[id_r[i]]
+                start_r = sample_r.start_pos
+                end_r = sample_r.end_pos
+                memory.repeat(start_r, end_r)
+                reused_steps += end_r - start_r
+
             # adding to archives
             sample_archive.add_gen(id_r[i], curr_gen)
             thetas_archive[curr_gen].samples.append(id_r[i])
@@ -451,11 +461,11 @@ if __name__ == "__main__":
                     actor.parameters(), lr=args.actor_lr)
 
                 # critic update
-                for _ in tqdm(range(actor_steps // args.n_grad)):
+                for _ in tqdm(range((actor_steps + reused_steps) // args.n_grad)):
                     critic.update(memory, args.batch_size, actor, critic_t)
 
                 # actor update
-                for _ in tqdm(range(actor_steps)):
+                for _ in tqdm(range(actor_steps + reused_steps)):
                     actor.update(memory, args.batch_size,
                                  critic, actor_t)
 
@@ -463,6 +473,7 @@ if __name__ == "__main__":
                 es_params[i] = actor.get_params()
 
         actor_steps = 0
+        reused_steps = 0
 
         # evaluate noisy actor(s)
         for i in range(args.n_noisy):
@@ -480,15 +491,15 @@ if __name__ == "__main__":
                 actor.set_params(es_params[i])
                 f, steps = evaluate(actor, env, memory=memory, n_episodes=args.n_episodes,
                                     render=args.render)
-                actor_steps += steps
                 fitness[i] = f
 
                 # adding to archives
                 if i >= args.n_grad:
-                    sample_archive.add_sample(
-                        Sample(es_params[i], f, [curr_gen]))
+                    sample_archive.add_sample(Sample(es_params[i], f, [curr_gen], total_steps + actor_steps,
+                                                     total_steps + actor_steps + steps))
                     thetas_archive[curr_gen].samples.append(n_ind)
                     n_ind += 1
+                actor_steps += steps
 
                 # print scores
                 prLightPurple('Actor fitness:{}'.format(f))
