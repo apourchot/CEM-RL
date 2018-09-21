@@ -44,6 +44,9 @@ class Memory():
             return self.memory_size
         return self.pos
 
+    def get_pos(self):
+        return self.pos
+
     # Expects tuples of (state, next_state, action, reward, done)
 
     def add(self, datum):
@@ -73,20 +76,63 @@ class Memory():
                 self.rewards[batch_inds],
                 self.dones[batch_inds])
 
+    def get_reward(self, start_pos, end_pos):
+
+        tmp = 0
+        if start_pos <= end_pos:
+            for i in range(start_pos, end_pos):
+                tmp += self.rewards[i]
+        else:
+            for i in range(start_pos, self.memory_size):
+                tmp += self.rewards[i]
+
+            for i in range(end_pos):
+                tmp += self.rewards[i]
+
+        return tmp
+
     def repeat(self, start_pos, end_pos):
 
-        for i in range(start_pos, end_pos):
+        if start_pos <= end_pos:
+            for i in range(start_pos, end_pos):
 
-            self.states[self.pos] = self.states[i].clone()
-            self.n_states[self.pos] = self.n_states[i].clone()
-            self.actions[self.pos] = self.actions[i].clone()
-            self.rewards[self.pos] = self.rewards[i].clone()
-            self.dones[self.pos] = self.dones[i].clone()
+                self.states[self.pos] = self.states[i].clone()
+                self.n_states[self.pos] = self.n_states[i].clone()
+                self.actions[self.pos] = self.actions[i].clone()
+                self.rewards[self.pos] = self.rewards[i].clone()
+                self.dones[self.pos] = self.dones[i].clone()
 
-            self.pos += 1
-            if self.pos == self.memory_size:
-                self.full = True
-                self.pos = 0
+                self.pos += 1
+                if self.pos == self.memory_size:
+                    self.full = True
+                    self.pos = 0
+
+        else:
+            for i in range(start_pos, self.memory_size):
+
+                self.states[self.pos] = self.states[i].clone()
+                self.n_states[self.pos] = self.n_states[i].clone()
+                self.actions[self.pos] = self.actions[i].clone()
+                self.rewards[self.pos] = self.rewards[i].clone()
+                self.dones[self.pos] = self.dones[i].clone()
+
+                self.pos += 1
+                if self.pos == self.memory_size:
+                    self.full = True
+                    self.pos = 0
+
+            for i in range(end_pos):
+
+                self.states[self.pos] = self.states[i].clone()
+                self.n_states[self.pos] = self.n_states[i].clone()
+                self.actions[self.pos] = self.actions[i].clone()
+                self.rewards[self.pos] = self.rewards[i].clone()
+                self.dones[self.pos] = self.dones[i].clone()
+
+                self.pos += 1
+                if self.pos == self.memory_size:
+                    self.full = True
+                    self.pos = 0
 
 
 class SharedMemory():
