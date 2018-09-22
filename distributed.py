@@ -98,7 +98,7 @@ def train(n_episodes, output=None, debug=False, render=False):
         # training all agents
         for i in range(args.n_actor):
             f, s = evaluate(agent.actors[i], envs[i], n_episodes=n_episodes,
-                            noise=None, random=random, memory=memory)
+                            noise=a_noise, random=random, memory=memory, render=render)
             steps.append(s)
             total_steps += s
             step_cpt += s
