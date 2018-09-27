@@ -56,14 +56,12 @@ def evaluate(actor, env, memory=None, n_episodes=1, random=False, noise=None, re
             # get next action and act
             action = policy(obs)
             n_obs, reward, done, info = env.step(action)
-            done_bool = 0 if steps + \
-                1 == env._max_episode_steps else float(done)
             score += reward
             steps += 1
 
             # adding in memory
             if memory is not None:
-                memory.add((obs, n_obs, action, reward, done_bool))
+                memory.add((obs, n_obs, action, reward, float(done)))
             obs = n_obs
 
             # render if needed
@@ -220,21 +218,18 @@ if __name__ == "__main__":
     # replay buffer
     memory = Memory(args.mem_size, state_dim, action_dim)
 
-    # agent
+    # action noise
     if args.ou_noise:
         a_noise = OrnsteinUhlenbeckProcess(
             action_dim, mu=args.ou_mu, theta=args.ou_theta, sigma=args.ou_sigma)
     else:
         a_noise = GaussianNoise(action_dim, sigma=args.gauss_sigma)
 
+    # agent
     if args.use_td3:
         agent = DTD3(state_dim, action_dim, max_action, memory, args)
     else:
         agent = D3PG(state_dim, action_dim, max_action, memory, args)
-        # agent.critic.load_model(
-        #     "./results/ddpg_5/hc/HalfCheetah-v2-run1/1000000_steps", "critic")
-        #  agent.critic_target.load_model(
-        #     "./results/ddpg_5/hc/HalfCheetah-v2-run1/1000000_steps", "critic")
 
     if args.mode == 'train':
         train(n_episodes=args.n_episodes,

@@ -4,6 +4,13 @@
 # saved files
 *.pkl
 *.txt
+*.mp4
+
+# deprecated and data
+deprecated/
+results/
+notebooks/
+videos/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

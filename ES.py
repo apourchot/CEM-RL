@@ -290,6 +290,8 @@ class sepCMAES:
         Updates the distribution
         """
 
+        scores = np.array(scores)
+        scores = -scores
         idx_sorted = np.argsort(scores)
 
         # update mean
@@ -342,6 +344,7 @@ class sepCEM:
                  sigma_init=0.1,
                  pop_size=256,
                  damp=0.01,
+                 damp_limit,
                  parents=None,
                  elitism=False,
                  antithetic=False):
@@ -355,8 +358,8 @@ class sepCEM:
         else:
             self.mu = np.array(mu_init)
         self.sigma = sigma_init
-        self.damp = sigma_init
-        self.damp_limit = damp
+        self.damp = damp
+        self.damp_limit = damp_limit
         self.tau = 0.95
         self.cov = self.sigma * np.ones(self.num_params)
 
@@ -409,13 +412,12 @@ class sepCEM:
         self.mu = self.weights @ solutions[idx_sorted[:self.parents]]
 
         z = (solutions[idx_sorted[:self.parents]] - old_mu)
-        self.cov = 1 / self.parents * \
-            self.weights @ (z * z) + self.damp * np.ones(self.num_params)
+        self.cov = self.weights @ (
+            z * z) + self.damp * np.ones(self.num_params)
 
         self.elite = solutions[idx_sorted[0]]
         self.elite_score = scores[idx_sorted[0]]
-
-        print("Elite score", -self.elite_score)
+        print(self.cov)
 
     def get_distrib_params(self):
         """
@@ -428,7 +430,7 @@ class sepCEM:
 class sepMCEM:
 
     """
-    Cross-entropy methods.
+    Cross-entropy methods with multiplicative noise. Not really working.
     """
 
     def __init__(self, num_params,
@@ -491,8 +493,8 @@ class sepMCEM:
         self.mu = self.weights @ solutions[idx_sorted[:self.parents]]
 
         z = (solutions[idx_sorted[:self.parents]] - old_mu)
-        self.cov = 1 / self.parents * \
-            self.weights @ (z * z) + self.damp * np.ones(self.num_params)
+        self.cov = self.weights @ (
+            z * z) + self.damp * np.ones(self.num_params)
 
     def get_distrib_params(self):
         """

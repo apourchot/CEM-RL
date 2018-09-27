@@ -79,102 +79,33 @@ class RLNN(nn.Module):
         )
 
 
-class ActorERL(RLNN):
+class Actor(RLNN):
 
-    def __init__(self, state_dim, action_dim, max_action, init=False):
-        super(ActorERL, self).__init__(state_dim, action_dim, max_action)
+    def __init__(self, state_dim, action_dim, max_action, layer_norm=False, init=True):
+        super(Actor, self).__init__(state_dim, action_dim, max_action)
 
-        self.l1 = nn.Linear(state_dim, 128)
-        self.n1 = nn.LayerNorm(128)
+        self.l1 = nn.Linear(state_dim, 400)
+        self.l2 = nn.Linear(400, 300)
+        self.l3 = nn.Linear(300, action_dim)
 
-        self.l2 = nn.Linear(128, 128)
-        self.n2 = nn.LayerNorm(128)
-
-        self.l3 = nn.Linear(128, action_dim)
-
-        self.max_action = max_action
-        if init:
-            self.l3.weight.data.mul_(0.1)
-            self.l3.bias.data.mul_(0.1)
+        if layer_norm:
+            self.n1 = nn.LayerNorm(400)
+            self.n2 = nn.LayerNorm(300)
+        self.layer_norm = layer_norm
 
     def forward(self, x):
 
-        x = F.tanh(self.n1(self.l1(x)))
-        x = F.tanh(self.n2(self.l2(x)))
-        x = F.tanh(self.l3(x))
+        if not self.layer_norm:
+            x = F.tanh(self.l1(x))
+            x = F.tanh(self.l2(x))
+            x = self.max_action * F.tanh(self.l3(x))
 
-        return self.max_action * x
-
-
-class CriticERL(RLNN):
-    def __init__(self, state_dim, action_dim):
-        super(CriticERL, self).__init__(state_dim, action_dim, 1)
-
-        self.l1 = nn.Linear(state_dim, 128)
-        self.l2 = nn.Linear(action_dim, 128)
-
-        self.l3 = nn.Linear(256, 256)
-        self.n3 = nn.LayerNorm(256)
-
-        self.l4 = nn.Linear(256, 1)
-        self.l4.weight.data.mul_(0.1)
-        self.l4.bias.data.mul_(0.1)
-
-    def forward(self, x, u):
-
-        x = F.elu(self.l1(x))
-        u = F.elu(self.l2(u))
-        x = torch.cat((x, u), 1)
-
-        x = F.elu(self.n3(self.l3(x)))
-        x = self.l4(x)
+        else:
+            x = F.tanh(self.n1(self.l1(x)))
+            x = F.tanh(self.n2(self.l2(x)))
+            x = self.max_action * F.tanh(self.l3(x))
 
         return x
-
-
-class CriticTD3ERL(RLNN):
-    def __init__(self, state_dim, action_dim):
-        super(CriticTD3ERL, self).__init__(state_dim, action_dim, 1)
-
-        # Q1 architecture
-        self.l1 = nn.Linear(state_dim, 128)
-        self.l2 = nn.Linear(action_dim, 128)
-
-        self.l3 = nn.Linear(256, 256)
-        self.n3 = nn.LayerNorm(256)
-
-        self.l4 = nn.Linear(256, 1)
-        self.l4.weight.data.mul_(0.1)
-        self.l4.bias.data.mul_(0.1)
-
-        # Q2 architecture
-        self.l5 = nn.Linear(state_dim, 128)
-        self.l6 = nn.Linear(action_dim, 128)
-
-        self.l7 = nn.Linear(256, 256)
-        self.n7 = nn.LayerNorm(256)
-
-        self.l8 = nn.Linear(256, 1)
-        self.l8.weight.data.mul_(0.1)
-        self.l8.bias.data.mul_(0.1)
-
-    def forward(self, x, u):
-
-        x1 = F.elu(self.l1(x))
-        u1 = F.elu(self.l2(u))
-        x1 = torch.cat((x1, u1), 1)
-
-        x1 = F.elu(self.n3(self.l3(x1)))
-        x1 = self.l4(x1)
-
-        x2 = F.elu(self.l5(x))
-        u2 = F.elu(self.l6(u))
-        x2 = torch.cat((x2, u2), 1)
-
-        x2 = F.elu(self.n7(self.l7(x2)))
-        x2 = self.l8(x2)
-
-        return x1, x2
 
 
 class Critic(RLNN):
@@ -201,35 +132,6 @@ class Critic(RLNN):
             x = F.relu(self.n1(self.l1(torch.cat([x, u], 1))))
             x = F.relu(self.n2(self.l2(x)))
             x = self.l3(x)
-
-        return x
-
-
-class Actor(RLNN):
-
-    def __init__(self, state_dim, action_dim, max_action, layer_norm=False, init=True):
-        super(Actor, self).__init__(state_dim, action_dim, max_action)
-
-        self.l1 = nn.Linear(state_dim, 400)
-        self.l2 = nn.Linear(400, 300)
-        self.l3 = nn.Linear(300, action_dim)
-
-        if layer_norm:
-            self.n1 = nn.LayerNorm(400)
-            self.n2 = nn.LayerNorm(300)
-        self.layer_norm = layer_norm
-
-    def forward(self, x):
-
-        if not self.layer_norm:
-            x = F.relu(self.l1(x))
-            x = F.relu(self.l2(x))
-            x = self.max_action * F.tanh(self.l3(x))
-
-        else:
-            x = F.relu(self.n1(self.l1(x)))
-            x = F.relu(self.n2(self.l2(x)))
-            x = self.max_action * F.tanh(self.l3(x))
 
         return x
 

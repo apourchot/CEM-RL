@@ -15,7 +15,7 @@ from tqdm import tqdm
 
 from ES import sepCMAES, sepCEM, sepMCEM
 from models import RLNN
-from random_process import GaussianNoise
+from random_process import GaussianNoise, OrnsteinUhlenbeckProcess
 from memory import Memory
 from util import *
 
@@ -26,66 +26,10 @@ else:
     FloatTensor = torch.FloatTensor
 
 
-class Actor(RLNN):
-
-    def __init__(self, state_dim, action_dim, max_action, args):
-        super(Actor, self).__init__(state_dim, action_dim, max_action)
-
-        self.l1 = nn.Linear(state_dim, 400)
-        self.l2 = nn.Linear(400, 300)
-        self.l3 = nn.Linear(300, action_dim)
-
-        if args.layer_norm:
-            self.n1 = nn.LayerNorm(400)
-            self.n2 = nn.LayerNorm(300)
-        self.layer_norm = args.layer_norm
-
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=args.actor_lr)
-        self.tau = args.tau
-        self.discount = args.discount
-        self.state_dim = state_dim
-        self.action_dim = action_dim
-        self.max_action = max_action
-
-    def forward(self, x):
-
-        if not self.layer_norm:
-            x = F.leaky_relu(self.l1(x))
-            x = F.leaky_relu(self.l2(x))
-            x = self.max_action * F.tanh(self.l3(x))
-
-        else:
-            x = F.leaky_relu(self.n1(self.l1(x)))
-            x = F.leaky_relu(self.n2(self.l2(x)))
-            x = self.max_action * F.tanh(self.l3(x))
-
-        return x
-
-    def update(self, memory, batch_size, critic, actor_t):
-
-        # Sample replay buffer
-        states, _, _, _, _ = memory.sample(batch_size)
-
-        # Compute actor loss
-        if args.use_td3:
-            actor_loss = -critic(states, self(states))[0].mean()
-        else:
-            actor_loss = -critic(states, self(states)).mean()
-
-        # Optimize the actor
-        self.optimizer.zero_grad()
-        actor_loss.backward()
-        self.optimizer.step()
-
-        # Update the frozen target models
-        for param, target_param in zip(self.parameters(), actor_t.parameters()):
-            target_param.data.copy_(
-                self.tau * param.data + (1 - self.tau) * target_param.data)
-
-
 def evaluate(actor, env, memory=None, n_episodes=1, random=False, noise=None, render=False):
     """
-    Computes the score of an actor on a given number of runs
+    Computes the score of an actor on a given number of runs,
+    fills the memory if needed
     """
 
     if not random:
@@ -116,14 +60,12 @@ def evaluate(actor, env, memory=None, n_episodes=1, random=False, noise=None, re
             # get next action and act
             action = policy(obs)
             n_obs, reward, done, _ = env.step(action)
-            done_bool = 0 if steps + \
-                1 == env._max_episode_steps else float(done)
             score += reward
             steps += 1
 
             # adding in memory
             if memory is not None:
-                memory.add((obs, n_obs, action, reward, done_bool))
+                memory.add((obs, n_obs, action, reward, float(done)))
             obs = n_obs
 
             # render if needed
@@ -137,6 +79,63 @@ def evaluate(actor, env, memory=None, n_episodes=1, random=False, noise=None, re
         scores.append(score)
 
     return np.mean(scores), steps
+
+
+class Actor(RLNN):
+
+    def __init__(self, state_dim, action_dim, max_action, args):
+        super(Actor, self).__init__(state_dim, action_dim, max_action)
+
+        self.l1 = nn.Linear(state_dim, 400)
+        self.l2 = nn.Linear(400, 300)
+        self.l3 = nn.Linear(300, action_dim)
+
+        if args.layer_norm:
+            self.n1 = nn.LayerNorm(400)
+            self.n2 = nn.LayerNorm(300)
+        self.layer_norm = args.layer_norm
+
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=args.actor_lr)
+        self.tau = args.tau
+        self.discount = args.discount
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.max_action = max_action
+
+    def forward(self, x):
+
+        if not self.layer_norm:
+            x = F.tanh(self.l1(x))
+            x = F.tanh(self.l2(x))
+            x = self.max_action * F.tanh(self.l3(x))
+
+        else:
+            x = F.tanh(self.n1(self.l1(x)))
+            x = F.tanh(self.n2(self.l2(x)))
+            x = self.max_action * F.tanh(self.l3(x))
+
+        return x
+
+    def update(self, memory, batch_size, critic, actor_t):
+
+        # Sample replay buffer
+        states, _, _, _, _ = memory.sample(batch_size)
+
+        # Compute actor loss
+        if args.use_td3:
+            actor_loss = -critic(states, self(states))[0].mean()
+        else:
+            actor_loss = -critic(states, self(states)).mean()
+
+        # Optimize the actor
+        self.optimizer.zero_grad()
+        actor_loss.backward()
+        self.optimizer.step()
+
+        # Update the frozen target models
+        for param, target_param in zip(self.parameters(), actor_t.parameters()):
+            target_param.data.copy_(
+                self.tau * param.data + (1 - self.tau) * target_param.data)
 
 
 class Critic(RLNN):
@@ -327,8 +326,9 @@ if __name__ == "__main__":
     parser.add_argument('--pop_size', default=10, type=int)
     parser.add_argument('--elitism', dest="elitism",  action='store_true')
     parser.add_argument('--n_grad', default=5, type=int)
-    parser.add_argument('--sigma_init', default=0.05, type=float)
+    parser.add_argument('--sigma_init', default=0.001, type=float)
     parser.add_argument('--damp', default=0.001, type=float)
+    parser.add_argument('--damp_limit', default=1e-5, type=float)
     parser.add_argument('--mult_noise', dest='mult_noise', action='store_true')
 
     # Training parameters
@@ -366,15 +366,11 @@ if __name__ == "__main__":
     # critic
     if args.use_td3:
         critic = CriticTD3(state_dim, action_dim, max_action, args)
-        # critic.load_model(
-        #     "results/ddpg_layer/hc/HalfCheetah-v2-run1/1000000_steps", "critic")
         critic_t = CriticTD3(state_dim, action_dim, max_action, args)
         critic_t.load_state_dict(critic.state_dict())
 
     else:
         critic = Critic(state_dim, action_dim, max_action, args)
-        # critic.load_model(
-        #     "results/ddpg_layer/hc/HalfCheetah-v2-run1/1000000_steps", "critic")
         critic_t = Critic(state_dim, action_dim, max_action, args)
         critic_t.load_state_dict(critic.state_dict())
 
@@ -382,7 +378,13 @@ if __name__ == "__main__":
     actor = Actor(state_dim, action_dim, max_action, args)
     actor_t = Actor(state_dim, action_dim, max_action, args)
     actor_t.load_state_dict(actor.state_dict())
-    a_noise = GaussianNoise(action_dim, sigma=args.gauss_sigma)
+
+    # action noise
+    if not args.ou_noise:
+        a_noise = GaussianNoise(action_dim, sigma=args.gauss_sigma)
+    else:
+        a_noise = OrnsteinUhlenbeckProcess(
+            action_dim, mu=args.ou_mu, theta=args.ou_theta, sigma=arhs.ou_sigma)
 
     if USE_CUDA:
         critic.cuda()
@@ -392,7 +394,7 @@ if __name__ == "__main__":
 
     # CEM
     if args.mult_noise:
-        es = sepMCEM(actor.get_size(), mu_init=actor.get_params(), sigma_init=args.sigma_init, damp=args.damp,
+        es = sepMCEM(actor.get_size(), mu_init=actor.get_params(), sigma_init=args.sigma_init, damp=args.damp, damp_limit=args.damp_limit,
                      pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.n_grad)
     else:
         es = sepCEM(actor.get_size(), mu_init=actor.get_params(), sigma_init=args.sigma_init, damp=args.damp,
