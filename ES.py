@@ -341,10 +341,10 @@ class sepCEM:
 
     def __init__(self, num_params,
                  mu_init=None,
-                 sigma_init=0.1,
+                 sigma_init=1e-3,
                  pop_size=256,
-                 damp=1e-5,
-                 damp_limit=1e-7,
+                 damp=1e-3,
+                 damp_limit=1e-5,
                  parents=None,
                  elitism=False,
                  antithetic=False):
@@ -412,7 +412,7 @@ class sepCEM:
         self.mu = self.weights @ solutions[idx_sorted[:self.parents]]
 
         z = (solutions[idx_sorted[:self.parents]] - old_mu)
-        self.cov = self.weights @ (
+        self.cov = 1 / self.parents * self.weights @ (
             z * z) + self.damp * np.ones(self.num_params)
 
         self.elite = solutions[idx_sorted[0]]
@@ -493,7 +493,7 @@ class sepMCEM:
         self.mu = self.weights @ solutions[idx_sorted[:self.parents]]
 
         z = (solutions[idx_sorted[:self.parents]] - old_mu)
-        self.cov = self.weights @ (
+        self.cov = 1 / self.parents * self.weights @ (
             z * z) + self.damp * np.ones(self.num_params)
 
     def get_distrib_params(self):

@@ -15,10 +15,16 @@ from tqdm import tqdm
 
 from ES import sepCMAES, sepCEM, sepMCEM
 from models import RLNN
-from random_process import GaussianNoise, OrnsteinUhlenbeckProcess
-from memory import Memory
+from collections import namedtuple
+from random_process import GaussianNoise
+from memory import Memory, Archive
+from samplers import IMSampler
 from util import *
 
+
+Sample = namedtuple('Sample', ('params', 'score',
+                               'gens', 'start_pos', 'end_pos', 'steps'))
+Theta = namedtuple('Theta', ('mu', 'cov', 'samples'))
 USE_CUDA = torch.cuda.is_available()
 if USE_CUDA:
     FloatTensor = torch.cuda.FloatTensor
@@ -28,8 +34,7 @@ else:
 
 def evaluate(actor, env, memory=None, n_episodes=1, random=False, noise=None, render=False):
     """
-    Computes the score of an actor on a given number of runs,
-    fills the memory if needed
+    Computes the score of an actor on a given number of runs
     """
 
     if not random:
@@ -326,10 +331,14 @@ if __name__ == "__main__":
     parser.add_argument('--pop_size', default=10, type=int)
     parser.add_argument('--elitism', dest="elitism",  action='store_true')
     parser.add_argument('--n_grad', default=5, type=int)
-    parser.add_argument('--sigma_init', default=0.001, type=float)
+    parser.add_argument('--sigma_init', default=0.05, type=float)
     parser.add_argument('--damp', default=0.001, type=float)
-    parser.add_argument('--damp_limit', default=1e-5, type=float)
     parser.add_argument('--mult_noise', dest='mult_noise', action='store_true')
+
+    # Sampler parameters
+    parser.add_argument('--alpha', type=float, default=1)
+    parser.add_argument('--epsilon', type=float, default=0)
+    parser.add_argument('--k', type=int, default=1)
 
     # Training parameters
     parser.add_argument('--n_episodes', default=1, type=int)
@@ -378,13 +387,7 @@ if __name__ == "__main__":
     actor = Actor(state_dim, action_dim, max_action, args)
     actor_t = Actor(state_dim, action_dim, max_action, args)
     actor_t.load_state_dict(actor.state_dict())
-
-    # action noise
-    if not args.ou_noise:
-        a_noise = GaussianNoise(action_dim, sigma=args.gauss_sigma)
-    else:
-        a_noise = OrnsteinUhlenbeckProcess(
-            action_dim, mu=args.ou_mu, theta=args.ou_theta, sigma=arhs.ou_sigma)
+    a_noise = GaussianNoise(action_dim, sigma=args.gauss_sigma)
 
     if USE_CUDA:
         critic.cuda()
@@ -393,24 +396,30 @@ if __name__ == "__main__":
         actor_t.cuda()
 
     # CEM
-    if args.mult_noise:
-        es = sepMCEM(actor.get_size(), mu_init=actor.get_params(), sigma_init=args.sigma_init, damp=args.damp, damp_limit=args.damp_limit,
-                     pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.n_grad)
-    else:
-        es = sepCEM(actor.get_size(), mu_init=actor.get_params(), sigma_init=args.sigma_init, damp=args.damp,
-                    pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.pop_size // 2, elitism=args.elitism)
+    es = sepCEM(actor.get_size(), mu_init=actor.get_params(), sigma_init=args.sigma_init, damp=args.damp, damp_limit=args.damp_limit,
+                pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.pop_size // 2, elitism=args.elitism)
+
+    # archives and sampler
+    sample_archive = Archive()
+    thetas_archive = Archive()
+    mu, cov = es.get_distrib_params()
+    thetas_archive.add_sample(Theta(mu, cov, []))
+    sampler = IMSampler(sample_archive, thetas_archive,  k=1)
 
     # training
+    n_ind = 0
     step_cpt = 0
+    curr_gen = 0
     total_steps = 0
     actor_steps = 0
+    reused_steps = 0
     df = pd.DataFrame(columns=["total_steps", "average_score",
                                "average_score_rl", "average_score_ea", "best_score"])
     while total_steps < args.max_steps:
 
-        fitness = []
-        fitness_ = []
-        es_params = es.ask(args.pop_size)
+        fitness = np.zeros(args.pop_size)
+        es_params, n_r, id_r, f_r = sampler.ask(args.pop_size, es)
+        print("Reused {} samples".format(n_r))
 
         # udpate the rl actors and the critic
         if total_steps > args.start_steps:
@@ -424,17 +433,19 @@ if __name__ == "__main__":
                     actor.parameters(), lr=args.actor_lr)
 
                 # critic update
-                for _ in tqdm(range(actor_steps // args.n_grad)):
+                for _ in tqdm(range((actor_steps + reused_steps) // args.n_grad)):
                     critic.update(memory, args.batch_size, actor, critic_t)
 
                 # actor update
-                for _ in tqdm(range(actor_steps)):
+                for _ in tqdm(range(actor_steps + reused_steps)):
                     actor.update(memory, args.batch_size,
                                  critic, actor_t)
 
                 # get the params back in the population
                 es_params[i] = actor.get_params()
+
         actor_steps = 0
+        reused_steps = 0
 
         # evaluate noisy actor(s)
         for i in range(args.n_noisy):
@@ -445,23 +456,55 @@ if __name__ == "__main__":
             prCyan('Noisy actor {} fitness:{}'.format(i, f))
 
         # evaluate all actors
-        for params in es_params:
+        for i in range(args.pop_size):
 
-            actor.set_params(params)
-            f, steps = evaluate(actor, env, memory=memory, n_episodes=args.n_episodes,
-                                render=args.render)
-            actor_steps += steps
-            fitness.append(f)
+            # evaluate new actors
+            if i < args.n_grad or (i >= args.n_grad and (i - args.n_grad) >= n_r):
+                actor.set_params(es_params[i])
+                start_pos = memory.get_pos()
+                f, steps = evaluate(actor, env, memory=memory, n_episodes=args.n_episodes,
+                                    render=args.render)
+                fitness[i] = f
 
-            # print scores
-            prLightPurple('Actor fitness:{}'.format(f))
+                # adding to archives
+                sample_archive.add_sample(Sample(
+                    es_params[i], f, [curr_gen], start_pos, (start_pos + steps) % args.mem_size, steps))
+                thetas_archive[curr_gen].samples.append(n_ind)
+                actor_steps += steps
+                n_ind += 1
 
-        # update es
+                # print scores
+                prLightPurple('Actor {}, fitness:{}'.format(i, f))
+
+            # reusing actors
+            else:
+                fitness[i] = f_r[i - args.n_grad]
+
+                # print reused score
+                prGreen('Actor {}, fitness:{}'.format(
+                    i, f_r[i - args.n_grad]))
+
+                # duplicating samples in buffer
+                sample_r = sample_archive[id_r[i - args.n_grad]]
+                start_r = sample_r.start_pos
+                end_r = sample_r.end_pos
+                memory.repeat(start_r, end_r)
+                reused_steps += sample_r.steps
+
+                # adding to archives
+                sample_archive.add_gen(id_r[i - args.n_grad], curr_gen)
+                thetas_archive[curr_gen].samples.append(id_r[i - args.n_grad])
+
+        # update ea
         es.tell(es_params, fitness)
+        mu, cov = es.get_distrib_params()
+        thetas_archive.add_sample(Theta(
+            mu, cov, []))
 
         # update step counts
         total_steps += actor_steps
         step_cpt += actor_steps
+        curr_gen += 1
 
         # save stuff
         if step_cpt >= args.period:
@@ -469,10 +512,11 @@ if __name__ == "__main__":
             df.to_pickle(args.output + "/log.pkl")
             res = {"total_steps": total_steps,
                    "average_score": np.mean(fitness),
-                   "average_score_half": np.mean(np.partition(fitness, args.pop_size // 2 - 1)[args.pop_size // 2:]),
+                   "average_score_half": np.mean(np.partition(fitness[:args.pop_size], args.pop_size // 2 - 1)[args.pop_size // 2:]),
                    "average_score_rl": np.mean(fitness[:args.n_grad]),
-                   "average_score_ea": np.mean(fitness[args.n_grad:]),
-                   "best_score": np.max(fitness)}
+                   "average_score_ea": np.mean(fitness[args.n_grad:args.pop_size]),
+                   "best_score": np.max(fitness),
+                   "n_reused": n_r}
 
             os.makedirs(args.output + "/{}_steps".format(total_steps),
                         exist_ok=True)
