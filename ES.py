@@ -343,8 +343,8 @@ class sepCEM:
                  mu_init=None,
                  sigma_init=0.1,
                  pop_size=256,
-                 damp=0.01,
-                 damp_limit,
+                 damp=1e-5,
+                 damp_limit=1e-7,
                  parents=None,
                  elitism=False,
                  antithetic=False):
