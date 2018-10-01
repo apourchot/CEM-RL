@@ -107,14 +107,14 @@ class Actor(RLNN):
     def forward(self, x):
 
         if not self.layer_norm:
-            x = F.tanh(self.l1(x))
-            x = F.tanh(self.l2(x))
-            x = self.max_action * F.tanh(self.l3(x))
+            x = torch.tanh(self.l1(x))
+            x = torch.tanh(self.l2(x))
+            x = self.max_action * torch.tanh(self.l3(x))
 
         else:
-            x = F.tanh(self.n1(self.l1(x)))
-            x = F.tanh(self.n2(self.l2(x)))
-            x = self.max_action * F.tanh(self.l3(x))
+            x = torch.tanh(self.n1(self.l1(x)))
+            x = torch.tanh(self.n2(self.l2(x)))
+            x = self.max_action * torch.tanh(self.l3(x))
 
         return x
 
@@ -163,13 +163,13 @@ class Critic(RLNN):
     def forward(self, x, u):
 
         if not self.layer_norm:
-            x = F.leaky_relu(self.l1(torch.cat([x, u], 1)))
-            x = F.leaky_relu(self.l2(x))
+            x = torch.leaky_relu(self.l1(torch.cat([x, u], 1)))
+            x = torch.leaky_relu(self.l2(x))
             x = self.l3(x)
 
         else:
-            x = F.leaky_relu(self.n1(self.l1(torch.cat([x, u], 1))))
-            x = F.leaky_relu(self.n2(self.l2(x)))
+            x = torch.leaky_relu(self.n1(self.l1(torch.cat([x, u], 1))))
+            x = torch.leaky_relu(self.n2(self.l2(x)))
             x = self.l3(x)
 
         return x
@@ -236,23 +236,23 @@ class CriticTD3(RLNN):
     def forward(self, x, u):
 
         if not self.layer_norm:
-            x1 = F.leaky_relu(self.l1(torch.cat([x, u], 1)))
-            x1 = F.leaky_relu(self.l2(x1))
+            x1 = torch.leaky_relu(self.l1(torch.cat([x, u], 1)))
+            x1 = torch.leaky_relu(self.l2(x1))
             x1 = self.l3(x1)
 
         else:
-            x1 = F.leaky_relu(self.n1(self.l1(torch.cat([x, u], 1))))
-            x1 = F.leaky_relu(self.n2(self.l2(x1)))
+            x1 = torch.leaky_relu(self.n1(self.l1(torch.cat([x, u], 1))))
+            x1 = torch.leaky_relu(self.n2(self.l2(x1)))
             x1 = self.l3(x1)
 
         if not self.layer_norm:
-            x2 = F.leaky_relu(self.l4(torch.cat([x, u], 1)))
-            x2 = F.leaky_relu(self.l5(x2))
+            x2 = torch.leaky_relu(self.l4(torch.cat([x, u], 1)))
+            x2 = torch.leaky_relu(self.l5(x2))
             x2 = self.l6(x2)
 
         else:
-            x2 = F.leaky_relu(self.n4(self.l4(torch.cat([x, u], 1))))
-            x2 = F.leaky_relu(self.n5(self.l5(x2)))
+            x2 = torch.leaky_relu(self.n4(self.l4(torch.cat([x, u], 1))))
+            x2 = torch.leaky_relu(self.n5(self.l5(x2)))
             x2 = self.l6(x2)
 
         return x1, x2
