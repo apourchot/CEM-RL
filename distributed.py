@@ -1,6 +1,5 @@
 # !/usr/bin/env python3
 import argparse
-import sys
 from copy import deepcopy
 
 import gym
@@ -8,7 +7,6 @@ import gym.spaces
 import numpy as np
 import pandas as pd
 import torch.multiprocessing as mp
-import logging
 
 from ddpg import D3PG
 from td3 import DTD3
