@@ -492,11 +492,9 @@ if __name__ == "__main__":
                 actor.save_model(
                     args.output + "/{}_steps".format(total_steps), "actor_mu")
             else:
-                critic.save_model(
-                    args.output + "/{}_steps".format(total_steps), "critic")
+                critic.save_model(args.output, "critic")
                 actor.set_params(es_params[idx_best])
-                actor.save_model(
-                    args.output + "/{}_steps".format(total_steps), "actor")
+                actor.save_model(args.output, "actor")
             df = df.append(res, ignore_index=True)
             step_cpt = 0
             print(res)
