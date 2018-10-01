@@ -345,6 +345,7 @@ if __name__ == "__main__":
 
     # misc
     parser.add_argument('--output', default='results', type=str)
+    parser.add_argument('--period', default=5000, type=int)
     parser.add_argument('--n_eval', default=10, type=int)
     parser.add_argument('--debug', dest='debug', action='store_true')
     parser.add_argument('--seed', default=-1, type=int)
@@ -457,20 +458,20 @@ if __name__ == "__main__":
         # update es
         es.tell(es_params, fitness)
 
-        # evaluate best actor over several runs. Memory is not filled
-        # and steps are not counted
-        idx_best = np.argmax(fitness)
-        actor.set_params(es_params[idx_best])
-        f_best, steps = evaluate(actor, env, memory=None, n_episodes=args.n_eval,
-                                 render=args.render)
-        prRed('Best Actor Average Fitness:{}'.format(f_best))
-
         # update step counts
         total_steps += actor_steps
         step_cpt += actor_steps
 
         # save stuff
         if step_cpt >= args.period:
+
+            # evaluate best actor over several runs. Memory is not filled
+            # and steps are not counted
+            idx_best = np.argmax(fitness)
+            actor.set_params(es_params[idx_best])
+            f_best, steps = evaluate(actor, env, memory=None, n_episodes=args.n_eval,
+                                     render=args.render)
+            prRed('Best Actor Average Fitness:{}'.format(f_best))
 
             df.to_pickle(args.output + "/log.pkl")
             res = {"total_steps": total_steps,
