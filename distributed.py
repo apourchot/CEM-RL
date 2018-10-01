@@ -56,12 +56,14 @@ def evaluate(actor, env, memory=None, n_episodes=1, random=False, noise=None, re
             # get next action and act
             action = policy(obs)
             n_obs, reward, done, info = env.step(action)
+            done_bool = 0 if steps + \
+                1 == env._max_episode_steps else float(done)
             score += reward
             steps += 1
 
             # adding in memory
             if memory is not None:
-                memory.add((obs, n_obs, action, reward, float(done)))
+                memory.add((obs, n_obs, action, reward, done_bool))
             obs = n_obs
 
             # render if needed
@@ -91,13 +93,13 @@ def train(n_episodes, output=None, debug=False, render=False):
     while total_steps < args.max_steps:
 
         random = total_steps < args.start_steps
-        steps = []
+        actor_steps = 0
 
         # training all agents
         for i in range(args.n_actor):
             f, s = evaluate(agent.actors[i], envs[i], n_episodes=n_episodes,
                             noise=a_noise, random=random, memory=memory, render=render)
-            steps.append(s)
+            actor_steps += s
             total_steps += s
             step_cpt += s
 
@@ -105,7 +107,7 @@ def train(n_episodes, output=None, debug=False, render=False):
             prCyan('noisy RL agent fitness:{}'.format(f))
 
         for i in range(args.n_actor):
-            agent.train(steps[i], i)
+            agent.train(actor_steps, i)
 
         # saving models and scores
         if step_cpt >= args.period:
