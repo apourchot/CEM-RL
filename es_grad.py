@@ -347,6 +347,8 @@ if __name__ == "__main__":
     parser.add_argument('--output', default='results', type=str)
     parser.add_argument('--period', default=5000, type=int)
     parser.add_argument('--n_eval', default=10, type=int)
+    parser.add_argument('--save_all_models',
+                        dest="save_all_models", action="store_true")
     parser.add_argument('--debug', dest='debug', action='store_true')
     parser.add_argument('--seed', default=-1, type=int)
     parser.add_argument('--render', dest='render', action='store_true')
@@ -481,13 +483,20 @@ if __name__ == "__main__":
                    "average_score_ea": np.mean(fitness[args.n_grad:]),
                    "best_score": f_best}
 
-            os.makedirs(args.output + "/{}_steps".format(total_steps),
-                        exist_ok=True)
-            critic.save_model(
-                args.output + "/{}_steps".format(total_steps), "critic")
-            actor.set_params(es.mu)
-            actor.save_model(
-                args.output + "/{}_steps".format(total_steps), "actor_mu")
+            if args.save_all_models:
+                os.makedirs(args.output + "/{}_steps".format(total_steps),
+                            exist_ok=True)
+                critic.save_model(
+                    args.output + "/{}_steps".format(total_steps), "critic")
+                actor.set_params(es.mu)
+                actor.save_model(
+                    args.output + "/{}_steps".format(total_steps), "actor_mu")
+            else:
+                critic.save_model(
+                    args.output + "/{}_steps".format(total_steps), "critic")
+                actor.set_params(es_params[idx_best])
+                actor.save_model(
+                    args.output + "/{}_steps".format(total_steps), "actor")
             df = df.append(res, ignore_index=True)
             step_cpt = 0
             print(res)

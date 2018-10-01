@@ -113,9 +113,12 @@ def train(n_episodes, output=None, debug=False, render=False):
         if step_cpt >= args.period:
 
             step_cpt = 0
-            os.makedirs(args.output + "/{}_steps".format(total_steps),
-                        exist_ok=True)
-            agent.save(args.output + "/{}_steps".format(total_steps))
+            if args.save_all_models:
+                os.makedirs(args.output + "/{}_steps".format(total_steps),
+                            exist_ok=True)
+                agent.save(args.output + "/{}_steps".format(total_steps))
+            else:
+                agent.save(args.output)
 
             fs = []
             for i in range(args.n_actor):
@@ -192,6 +195,8 @@ if __name__ == "__main__":
 
     # misc
     parser.add_argument('--output', default='results', type=str)
+    parser.add_argument('--save_all_models',
+                        dest="save_all_models", action="store_true")
     parser.add_argument('--debug', dest='debug', action='store_true')
     parser.add_argument('--seed', default=-1, type=int)
     parser.add_argument('--render', dest='render', action='store_true')
