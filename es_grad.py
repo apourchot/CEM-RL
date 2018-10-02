@@ -396,10 +396,10 @@ if __name__ == "__main__":
         actor_t.cuda()
 
     # CEM
-    # es = sepCEMv2(actor.get_size(), mu_init=actor.get_params(), sigma_init=args.sigma_init, damp=args.damp, damp_limit=args.damp_limit,
-    #               pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.pop_size // 2, elitism=args.elitism)
-    es = sepCEMA(actor.get_size(), mu_init=actor.get_params(), sigma_init=args.sigma_init,
-                 pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.pop_size // 2, elitism=args.elitism)
+    es = sepCEMv2(actor.get_size(), mu_init=actor.get_params(), sigma_init=args.sigma_init, damp=args.damp, damp_limit=args.damp_limit,
+                  pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.pop_size // 2, elitism=args.elitism)
+    # es = sepCEMA(actor.get_size(), mu_init=actor.get_params(), sigma_init=args.sigma_init,
+    #              pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.pop_size // 2, elitism=args.elitism)
 
     # training
     step_cpt = 0
@@ -429,7 +429,7 @@ if __name__ == "__main__":
                     critic.update(memory, args.batch_size, actor, critic_t)
 
                 # actor update
-                for _ in tqdm(range(10)):  # actor_steps)):
+                for _ in tqdm(range(actor_steps)):
                     actor.update(memory, args.batch_size,
                                  critic, actor_t)
 
