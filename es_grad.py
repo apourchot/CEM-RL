@@ -4,7 +4,6 @@ import argparse
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import cma
 import pandas as pd
 
 import gym
@@ -12,7 +11,7 @@ import gym.spaces
 import numpy as np
 from tqdm import tqdm
 
-from ES import sepCMAES, sepCEM
+from ES import sepCMAES, sepCEM, sepCEMv2, sepCEMA
 from models import RLNN
 from random_process import GaussianNoise, OrnsteinUhlenbeckProcess
 from memory import Memory
@@ -397,8 +396,10 @@ if __name__ == "__main__":
         actor_t.cuda()
 
     # CEM
-    es = sepCEM(actor.get_size(), mu_init=actor.get_params(), sigma_init=args.sigma_init, damp=args.damp, damp_limit=args.damp_limit,
-                pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.pop_size // 2, elitism=args.elitism)
+    # es = sepCEMv2(actor.get_size(), mu_init=actor.get_params(), sigma_init=args.sigma_init, damp=args.damp, damp_limit=args.damp_limit,
+    #               pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.pop_size // 2, elitism=args.elitism)
+    es = sepCEMA(actor.get_size(), mu_init=actor.get_params(), sigma_init=args.sigma_init,
+                 pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.pop_size // 2, elitism=args.elitism)
 
     # training
     step_cpt = 0
@@ -420,7 +421,7 @@ if __name__ == "__main__":
                 # set params
                 actor.set_params(es_params[i])
                 actor_t.set_params(es_params[i])
-                actor.optimizer = torch.optim.Adam(
+                actor.optimizer = torch.optim.SGD(
                     actor.parameters(), lr=args.actor_lr)
 
                 # critic update
@@ -428,7 +429,7 @@ if __name__ == "__main__":
                     critic.update(memory, args.batch_size, actor, critic_t)
 
                 # actor update
-                for _ in tqdm(range(actor_steps)):
+                for _ in tqdm(range(10)):  # actor_steps)):
                     actor.update(memory, args.batch_size,
                                  critic, actor_t)
 
@@ -468,8 +469,7 @@ if __name__ == "__main__":
 
             # evaluate best actor over several runs. Memory is not filled
             # and steps are not counted
-            idx_best = np.argmax(fitness)
-            actor.set_params(es_params[idx_best])
+            actor.set_params(es.mu)
             f_best, steps = evaluate(actor, env, memory=None, n_episodes=args.n_eval,
                                      render=args.render)
             prRed('Best Actor Average Fitness:{}'.format(f_best))
@@ -492,7 +492,7 @@ if __name__ == "__main__":
                     args.output + "/{}_steps".format(total_steps), "actor_mu")
             else:
                 critic.save_model(args.output, "critic")
-                actor.set_params(es_params[idx_best])
+                actor.set_params(es.mu)
                 actor.save_model(args.output, "actor")
             df = df.append(res, ignore_index=True)
             step_cpt = 0
