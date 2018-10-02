@@ -342,7 +342,7 @@ if __name__ == "__main__":
     parser.add_argument('--n_test', default=1, type=int)
 
     # misc
-    parser.add_argument('--output', default='results', type=str)
+    parser.add_argument('--output', default='results/', type=str)
     parser.add_argument('--period', default=5000, type=int)
     parser.add_argument('--n_eval', default=10, type=int)
     parser.add_argument('--save_all_models',
@@ -398,8 +398,6 @@ if __name__ == "__main__":
     # CEM
     es = sepCEMv2(actor.get_size(), mu_init=actor.get_params(), sigma_init=args.sigma_init, damp=args.damp, damp_limit=args.damp_limit,
                   pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.pop_size // 2, elitism=args.elitism)
-    # es = sepCEMA(actor.get_size(), mu_init=actor.get_params(), sigma_init=args.sigma_init,
-    #              pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.pop_size // 2, elitism=args.elitism)
 
     # training
     step_cpt = 0
@@ -421,7 +419,7 @@ if __name__ == "__main__":
                 # set params
                 actor.set_params(es_params[i])
                 actor_t.set_params(es_params[i])
-                actor.optimizer = torch.optim.SGD(
+                actor.optimizer = torch.optim.Adam(
                     actor.parameters(), lr=args.actor_lr)
 
                 # critic update
@@ -467,12 +465,12 @@ if __name__ == "__main__":
         # save stuff
         if step_cpt >= args.period:
 
-            # evaluate best actor over several runs. Memory is not filled
+            # evaluate mean actor over several runs. Memory is not filled
             # and steps are not counted
             actor.set_params(es.mu)
-            f_best, steps = evaluate(actor, env, memory=None, n_episodes=args.n_eval,
-                                     render=args.render)
-            prRed('Best Actor Average Fitness:{}'.format(f_best))
+            f_mu, _ = evaluate(actor, env, memory=None, n_episodes=args.n_eval,
+                               render=args.render)
+            prRed('Actor Mu Average Fitness:{}'.format(f_mu))
 
             df.to_pickle(args.output + "/log.pkl")
             res = {"total_steps": total_steps,
@@ -480,7 +478,8 @@ if __name__ == "__main__":
                    "average_score_half": np.mean(np.partition(fitness, args.pop_size // 2 - 1)[args.pop_size // 2:]),
                    "average_score_rl": np.mean(fitness[:args.n_grad]),
                    "average_score_ea": np.mean(fitness[args.n_grad:]),
-                   "best_score": f_best}
+                   "best_score": np.max(fitness),
+                   "mu_score": f_mu}
 
             if args.save_all_models:
                 os.makedirs(args.output + "/{}_steps".format(total_steps),
