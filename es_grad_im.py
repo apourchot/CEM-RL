@@ -34,7 +34,8 @@ else:
 
 def evaluate(actor, env, memory=None, n_episodes=1, random=False, noise=None, render=False):
     """
-    Computes the score of an actor on a given number of runs
+    Computes the score of an actor on a given number of runs,
+    fills the memory if needed
     """
 
     if not random:
@@ -65,12 +66,14 @@ def evaluate(actor, env, memory=None, n_episodes=1, random=False, noise=None, re
             # get next action and act
             action = policy(obs)
             n_obs, reward, done, _ = env.step(action)
+            done_bool = 0 if steps + \
+                1 == env._max_episode_steps else float(done)
             score += reward
             steps += 1
 
             # adding in memory
             if memory is not None:
-                memory.add((obs, n_obs, action, reward, float(done)))
+                memory.add((obs, n_obs, action, reward, done_bool))
             obs = n_obs
 
             # render if needed
@@ -110,13 +113,13 @@ class Actor(RLNN):
     def forward(self, x):
 
         if not self.layer_norm:
-            x = F.tanh(self.l1(x))
-            x = F.tanh(self.l2(x))
+            x = torch.tanh(self.l1(x))
+            x = torch.tanh(self.l2(x))
             x = self.max_action * F.tanh(self.l3(x))
 
         else:
-            x = F.tanh(self.n1(self.l1(x)))
-            x = F.tanh(self.n2(self.l2(x)))
+            x = torch.tanh(self.n1(self.l1(x)))
+            x = torch.tanh(self.n2(self.l2(x)))
             x = self.max_action * F.tanh(self.l3(x))
 
         return x
@@ -331,8 +334,9 @@ if __name__ == "__main__":
     parser.add_argument('--pop_size', default=10, type=int)
     parser.add_argument('--elitism', dest="elitism",  action='store_true')
     parser.add_argument('--n_grad', default=5, type=int)
-    parser.add_argument('--sigma_init', default=0.05, type=float)
-    parser.add_argument('--damp', default=0.001, type=float)
+    parser.add_argument('--sigma_init', default=1e-3, type=float)
+    parser.add_argument('--damp', default=1e-3, type=float)
+    parser.add_argument('--damp_limit', default=1e-5, type=float)
     parser.add_argument('--mult_noise', dest='mult_noise', action='store_true')
 
     # Sampler parameters
@@ -351,8 +355,11 @@ if __name__ == "__main__":
     parser.add_argument('--n_test', default=1, type=int)
 
     # misc
-    parser.add_argument('--output', default='results', type=str)
+    parser.add_argument('--output', default='results/', type=str)
     parser.add_argument('--period', default=5000, type=int)
+    parser.add_argument('--n_eval', default=10, type=int)
+    parser.add_argument('--save_all_models',
+                        dest="save_all_models", action="store_true")
     parser.add_argument('--debug', dest='debug', action='store_true')
     parser.add_argument('--seed', default=-1, type=int)
     parser.add_argument('--render', dest='render', action='store_true')
@@ -509,22 +516,34 @@ if __name__ == "__main__":
         # save stuff
         if step_cpt >= args.period:
 
+            # evaluate mean actor over several runs. Memory is not filled
+            # and steps are not counted
+            actor.set_params(es.mu)
+            f_mu, _ = evaluate(actor, env, memory=None, n_episodes=args.n_eval,
+                               render=args.render)
+            prRed('Actor Mu Average Fitness:{}'.format(f_mu))
+
             df.to_pickle(args.output + "/log.pkl")
             res = {"total_steps": total_steps,
                    "average_score": np.mean(fitness),
-                   "average_score_half": np.mean(np.partition(fitness[:args.pop_size], args.pop_size // 2 - 1)[args.pop_size // 2:]),
+                   "average_score_half": np.mean(np.partition(fitness, args.pop_size // 2 - 1)[args.pop_size // 2:]),
                    "average_score_rl": np.mean(fitness[:args.n_grad]),
-                   "average_score_ea": np.mean(fitness[args.n_grad:args.pop_size]),
+                   "average_score_ea": np.mean(fitness[args.n_grad:]),
                    "best_score": np.max(fitness),
-                   "n_reused": n_r}
+                   "mu_score": f_mu}
 
-            os.makedirs(args.output + "/{}_steps".format(total_steps),
-                        exist_ok=True)
-            critic.save_model(
-                args.output + "/{}_steps".format(total_steps), "critic")
-            actor.set_params(es.mu)
-            actor.save_model(
-                args.output + "/{}_steps".format(total_steps), "actor_mu")
+            if args.save_all_models:
+                os.makedirs(args.output + "/{}_steps".format(total_steps),
+                            exist_ok=True)
+                critic.save_model(
+                    args.output + "/{}_steps".format(total_steps), "critic")
+                actor.set_params(es.mu)
+                actor.save_model(
+                    args.output + "/{}_steps".format(total_steps), "actor_mu")
+            else:
+                critic.save_model(args.output, "critic")
+                actor.set_params(es.mu)
+                actor.save_model(args.output, "actor")
             df = df.append(res, ignore_index=True)
             step_cpt = 0
             print(res)

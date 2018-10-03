@@ -202,7 +202,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     args.output = get_output_folder(args.output, args.env)
 
-    mp.set_start_method("spawn", force=True)
     with open(args.output + "/parameters.txt", 'w') as file:
         for key, value in vars(args).items():
             file.write("{} = {}\n".format(key, value))
