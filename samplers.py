@@ -28,24 +28,26 @@ class IMSampler():
     Importance mixing sampler optimized for diagonal covariance matrix
     """
 
-    def __init__(self, sample_archive, thetas_archive, **kwargs):
-        self.sample_archive = sample_archive
-        self.thetas_archive = thetas_archive
-        self.k = kwargs["k"]
+    def __init__(self, optimizer):
+        self.optimizer = optimizer
+        self.old_mu = None
+        self.old_cov = None
+        self.first = True
 
-    def ask(self, pop_size, optimizer):
+    def ask(self, pop_size, old_samples):
 
-        if len(self.sample_archive) < pop_size:
-            return optimizer.ask(pop_size), 0, [], []
+        if self.first:
+            mu, cov = self.optimizer.get_distrib_params()
+            self.old_mu = mu
+            self.old_cov = cov
+            self.first = False
+            return self.optimizer.ask(pop_size), 0, []
 
         # misc
         n_reused = 0
         n_sampled = 0
-        theta = self.thetas_archive[-1]
-        mu = theta.mu
-        cov = theta.cov
+        mu, cov = self.optimizer.get_distrib_params()
 
-        scores_reused = []
         idx_reused = []
         params = np.zeros((pop_size, mu.shape[0]))
 
@@ -53,50 +55,36 @@ class IMSampler():
         def new_log_pdf(z):
             return norm.logpdf(z, loc=mu, scale=np.sqrt(cov)).sum()
 
-        # iterating over k last populations
-        for j in range(min(self.k, len(self.thetas_archive) - 1)):
+        # old pdf
+        def old_log_pdf(z):
+            return norm.logpdf(z, loc=self.old_mu, scale=np.sqrt(self.old_cov)).sum()
 
-            # old distribution parameters
-            id_theta = len(self.thetas_archive) - 2 - j
-            old_theta = self.thetas_archive[id_theta]
+        # iterating over population
+        for i in range(self.optimizer.pop_size):
 
-            # iterating over population
-            for i in range(len(old_theta.samples)):
+            # old individual
+            sample = old_samples[i]
 
-                old_mu = old_theta.mu
-                old_cov = old_theta.cov
+            if n_reused + n_sampled < pop_size:
 
-                # old individual
-                id_sample = old_theta.samples[i]
-                sample = self.sample_archive[id_sample]
+                u = np.random.uniform(0, 1)
 
-                # old pdf
-                def old_log_pdf(z):
-                    return norm.logpdf(z, loc=old_mu, scale=np.sqrt(old_cov)).sum()
+                # rejection sampling
+                if np.log(u) < new_log_pdf(sample) - old_log_pdf(sample):
 
-                if n_reused + n_sampled < pop_size:
+                    params[n_reused] = sample
+                    idx_reused.append(i)
+                    n_reused += 1
 
-                    param = sample.params
-                    u = np.random.uniform(0, 1)
+            if n_reused + n_sampled < pop_size:
 
-                    # rejection sampling
-                    if np.log(u) < new_log_pdf(param) - old_log_pdf(param):
+                sample = self.optimizer.ask(1).reshape(-1)
+                u = np.random.uniform(0, 1)
 
-                        params[n_reused] = param
-                        scores_reused.append(sample.score)
-                        idx_reused.append(
-                            len(self.sample_archive) - pop_size + i)
-                        n_reused += 1
-
-                if n_reused + n_sampled < pop_size:
-
-                    param = optimizer.ask(1).reshape(-1)
-                    u = np.random.uniform(0, 1)
-
-                    # rejection sampling
-                    if np.log(1 - u) >= old_log_pdf(param) - new_log_pdf(param):
-                        params[-n_sampled-1] = param
-                        n_sampled += 1
+                # rejection sampling
+                if np.log(1 - u) >= old_log_pdf(sample) - new_log_pdf(sample):
+                    params[-n_sampled-1] = sample
+                    n_sampled += 1
 
             if n_reused + n_sampled >= pop_size:
                 break
@@ -105,8 +93,11 @@ class IMSampler():
         cpt = n_reused + n_sampled
         while cpt < pop_size:
 
-            param = optimizer.ask(1).reshape(-1)
-            params[cpt - n_sampled] = param
+            sample = self.optimizer.ask(1).reshape(-1)
+            params[cpt - n_sampled] = sample
             cpt += 1
 
-        return params, n_reused, idx_reused, scores_reused
+        self.old_mu = mu
+        self.old_cov = cov
+
+        return params, n_reused, idx_reused

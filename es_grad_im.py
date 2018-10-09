@@ -405,27 +405,34 @@ if __name__ == "__main__":
     # CEM
     es = sepCEM(actor.get_size(), mu_init=actor.get_params(), sigma_init=args.sigma_init, damp=args.damp, damp_limit=args.damp_limit,
                 pop_size=args.pop_size, antithetic=not args.pop_size % 2, parents=args.pop_size // 2, elitism=args.elitism)
+    sampler = IMSampler(es)
 
-    # archives and sampler
-    sample_archive = Archive()
-    thetas_archive = Archive()
-    mu, cov = es.get_distrib_params()
-    thetas_archive.add_sample(Theta(mu, cov, []))
-    sampler = IMSampler(sample_archive, thetas_archive,  k=1)
+    # stuff to save
+    df = pd.DataFrame(columns=["total_steps", "average_score",
+                               "average_score_rl", "average_score_ea", "best_score"])
 
     # training
-    n_ind = 0
     step_cpt = 0
-    curr_gen = 0
     total_steps = 0
     actor_steps = 0
     reused_steps = 0
-    df = pd.DataFrame(columns=["total_steps", "average_score",
-                               "average_score_rl", "average_score_ea", "best_score"])
+
+    es_params = []
+    fitness = []
+    n_steps = []
+    n_start = []
+
+    old_es_params = []
+    old_fitness = []
+    old_n_steps = []
+    old_n_start = []
+
     while total_steps < args.max_steps:
 
         fitness = np.zeros(args.pop_size)
-        es_params, n_r, id_r, f_r = sampler.ask(args.pop_size, es)
+        n_start = np.zeros(args.pop_size)
+        n_steps = np.zeros(args.pop_size)
+        es_params, n_r, idx_r = sampler.ask(args.pop_size, old_es_params)
         print("Reused {} samples".format(n_r))
 
         # udpate the rl actors and the critic
@@ -467,51 +474,51 @@ if __name__ == "__main__":
 
             # evaluate new actors
             if i < args.n_grad or (i >= args.n_grad and (i - args.n_grad) >= n_r):
+
                 actor.set_params(es_params[i])
-                start_pos = memory.get_pos()
+                pos = memory.get_pos()
                 f, steps = evaluate(actor, env, memory=memory, n_episodes=args.n_episodes,
                                     render=args.render)
-                fitness[i] = f
-
-                # adding to archives
-                sample_archive.add_sample(Sample(
-                    es_params[i], f, [curr_gen], start_pos, (start_pos + steps) % args.mem_size, steps))
-                thetas_archive[curr_gen].samples.append(n_ind)
                 actor_steps += steps
-                n_ind += 1
+
+                # updating arrays
+                fitness[i] = f
+                n_steps[i] = steps
+                n_start[i] = pos
 
                 # print scores
                 prLightPurple('Actor {}, fitness:{}'.format(i, f))
 
             # reusing actors
             else:
-                fitness[i] = f_r[i - args.n_grad]
+                idx = idx_r[i - args.n_grad]
+                fitness[i] = old_fitness[idx]
+                n_steps[i] = old_n_steps[idx]
+                n_start[i] = old_n_start[idx]
+
+                # duplicating samples in buffer
+                memory.repeat(int(n_start[i]), int(
+                    (n_start[i] + n_steps[i]) % args.mem_size))
+
+                # adding old_steps
+                reused_steps += old_n_steps[idx]
 
                 # print reused score
                 prGreen('Actor {}, fitness:{}'.format(
-                    i, f_r[i - args.n_grad]))
-
-                # duplicating samples in buffer
-                sample_r = sample_archive[id_r[i - args.n_grad]]
-                start_r = sample_r.start_pos
-                end_r = sample_r.end_pos
-                memory.repeat(start_r, end_r)
-                reused_steps += sample_r.steps
-
-                # adding to archives
-                sample_archive.add_gen(id_r[i - args.n_grad], curr_gen)
-                thetas_archive[curr_gen].samples.append(id_r[i - args.n_grad])
+                    i, fitness[i]))
 
         # update ea
         es.tell(es_params, fitness)
-        mu, cov = es.get_distrib_params()
-        thetas_archive.add_sample(Theta(
-            mu, cov, []))
 
         # update step counts
         total_steps += actor_steps
         step_cpt += actor_steps
-        curr_gen += 1
+
+        # update sampler stuff
+        old_fitness = deepcopy(fitness)
+        old_n_steps = deepcopy(n_steps)
+        old_n_start = deepcopy(n_start)
+        old_es_params = deepcopy(es_params)
 
         # save stuff
         if step_cpt >= args.period:
@@ -527,10 +534,11 @@ if __name__ == "__main__":
             res = {"total_steps": total_steps,
                    "average_score": np.mean(fitness),
                    "average_score_half": np.mean(np.partition(fitness, args.pop_size // 2 - 1)[args.pop_size // 2:]),
-                   "average_score_rl": np.mean(fitness[:args.n_grad]),
+                   "average_score_rl": np.mean(fitness[:args.n_grad]) if args.n_grad > 0 else None,
                    "average_score_ea": np.mean(fitness[args.n_grad:]),
                    "best_score": np.max(fitness),
-                   "mu_score": f_mu}
+                   "mu_score": f_mu,
+                   "n_reused": n_r}
 
             if args.save_all_models:
                 os.makedirs(args.output + "/{}_steps".format(total_steps),
