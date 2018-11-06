@@ -41,7 +41,7 @@ def evaluate(actor, env, memory=None, n_episodes=1, random=False, noise=None, re
             return np.clip(action, -max_action, max_action)
 
     else:
-        def policy(state):sds
+        def policy(state):
             return env.action_space.sample()
 
     scores = []
@@ -65,7 +65,11 @@ def evaluate(actor, env, memory=None, n_episodes=1, random=False, noise=None, re
 
             # adding in memory
             if memory is not None:
-                memory.add((obs, n_obs, action, reward, done_bool))
+                if done:
+                    memory.add((obs, n_obs, action, score, done_bool))
+
+                else:
+                    memory.add((obs, n_obs, action, 0, done_bool))
             obs = n_obs
 
             # render if needed
@@ -91,7 +95,12 @@ class Actor(RLNN):
         self.l3 = nn.Linear(300, action_dim)
 
         if args.layer_norm:
-            self.layer_norm = True
+            self.n1 = nn.LayerNorm(400)
+            self.n2 = nn.LayerNorm(300)
+        self.layer_norm = args.layer_norm
+
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=args.actor_lr)
+        self.tau = args.tau
         self.discount = args.discount
         self.state_dim = state_dim
         self.action_dim = action_dim
