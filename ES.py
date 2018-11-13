@@ -529,6 +529,34 @@ class sepCEM:
         return np.copy(self.mu), np.copy(self.cov)
 
 
+class Control:
+
+    """
+    Cross-entropy methods.
+    """
+
+    def __init__(self, num_params, pop_size=256, sigma_init=1e-3):
+
+        # misc
+        self.num_params = num_params
+        self.pop = np.sqrt(sigma_init) * np.random.rand(pop_size, num_params)
+        self.mu = np.zeros(num_params)
+
+    def ask(self, pop_size):
+        """
+        Returns a list of candidates parameters
+        """
+        return self.pop
+
+    def tell(self, solutions, scores):
+        """
+        Updates the distribution
+        """
+        self.mu = solutions[np.argmax(scores)]
+        self.pop = solutions
+        np.random.shuffle(self.pop)
+
+
 class sepCEMA:
 
     """
