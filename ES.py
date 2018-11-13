@@ -535,11 +535,11 @@ class Control:
     Cross-entropy methods.
     """
 
-    def __init__(self, num_params, pop_size=256, sigma_init=1e-3):
+    def __init__(self, num_params, mu_init, pop_size=256, sigma_init=1e-3):
 
         # misc
         self.num_params = num_params
-        self.pop = np.sqrt(sigma_init) * np.random.rand(pop_size, num_params)
+        self.pop = np.sqrt(sigma_init) * np.random.rand(pop_size, num_params) + mu_init
         self.mu = np.zeros(num_params)
 
     def ask(self, pop_size):
