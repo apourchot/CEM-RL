@@ -90,7 +90,13 @@ class Actor(RLNN):
         self.l2 = nn.Linear(400, 300)
         self.l3 = nn.Linear(300, action_dim)
 
+        if args.layer_norm:
+            self.n1 = nn.LayerNorm(400)
+            self.n2 = nn.LayerNorm(300)
         self.layer_norm = args.layer_norm
+
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=args.actor_lr)
+        self.tau = args.tau
         self.discount = args.discount
         self.state_dim = state_dim
         self.action_dim = action_dim
