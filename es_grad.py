@@ -90,8 +90,7 @@ class Actor(RLNN):
         self.l2 = nn.Linear(400, 300)
         self.l3 = nn.Linear(300, action_dim)
 
-        if args.layer_norm:
-            self.layer_norm = True
+        self.layer_norm = args.layer_norm
         self.discount = args.discount
         self.state_dim = state_dim
         self.action_dim = action_dim
