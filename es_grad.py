@@ -41,7 +41,7 @@ def evaluate(actor, env, memory=None, n_episodes=1, random=False, noise=None, re
             return np.clip(action, -max_action, max_action)
 
     else:
-        def policy(state):sds
+        def policy(state):
             return env.action_space.sample()
 
     scores = []
