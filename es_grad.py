@@ -295,7 +295,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--mode', default='train', type=str,)
-    parser.add_argument('--env', default='HalfCheetah-v2', type=str)
+    parser.add_argument('--env', default='HalfCheetah-v4', type=str)
     parser.add_argument('--start_steps', default=10000, type=int)
 
     # DDPG parameters
@@ -494,7 +494,8 @@ if __name__ == "__main__":
                 critic.save_model(args.output, "critic")
                 actor.set_params(es.mu)
                 actor.save_model(args.output, "actor")
-            df = df.append(res, ignore_index=True)
+            # df = df.append(res, ignore_index=True)
+            df = pd.concat([df, pd.DataFrame([res])], ignore_index=True)
             step_cpt = 0
             print(res)
 
